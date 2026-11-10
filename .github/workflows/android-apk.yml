@@ -40,16 +40,17 @@ jobs:
       - name: Generate Android project
         run: npx expo prebuild --platform android --no-install
         env:
-          # 저장소 Secrets에 값을 넣으면 AI 판별이 연결된 APK가, 비워 두면 데모 모드 APK가 만들어진다.
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          # 앱에 들어가는 공개용 값(Supabase 주소, publishable key). 비밀값이 아니다.
+          # 바꾸려면 저장소 Settings → Variables에 같은 이름으로 넣는다.
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL || 'https://fkhcflvpsspgshqqsbai.supabase.co' }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_9fO4i-9a0RgCSHYPZfl0_A_oqxoD7w1' }}
 
       - name: Build release APK
         working-directory: android
         run: ./gradlew assembleRelease --no-daemon
         env:
-          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
-          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL || 'https://fkhcflvpsspgshqqsbai.supabase.co' }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_9fO4i-9a0RgCSHYPZfl0_A_oqxoD7w1' }}
 
       - name: Rename APK
         run: cp android/app/build/outputs/apk/release/app-release.apk REALDEX.apk

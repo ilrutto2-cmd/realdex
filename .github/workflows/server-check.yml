@@ -1,0 +1,52 @@
+name: Server check
+
+# 배포된 Supabase 판별 함수가 실제로 동작하는지 확인한다.
+# 익명 로그인 → 위키백과의 칠성무당벌레 사진으로 identify 호출 → 결과 출력.
+# 실행할 때마다 Anthropic API 사용료가 사진 1장만큼 든다.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/server-check.yml'
+      - 'supabase/functions/**'
+  workflow_dispatch:
+
+env:
+  SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL || 'https://fkhcflvpsspgshqqsbai.supabase.co' }}
+  SUPABASE_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_9fO4i-9a0RgCSHYPZfl0_A_oqxoD7w1' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Anonymous sign-in
+        run: |
+          RES=$(curl -sS -X POST "$SUPABASE_URL/auth/v1/signup" -H "apikey: $SUPABASE_KEY" -H "content-type: application/json" -d '{}')
+          TOKEN=$(echo "$RES" | jq -r '.access_token // empty')
+          if [ -z "$TOKEN" ]; then echo "익명 로그인 실패: $RES"; exit 1; fi
+          echo "::add-mask::$TOKEN"
+          echo "TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "익명 로그인 성공"
+
+      - name: Download test photo (Wikipedia)
+        run: |
+          UA="realdex-server-check/1.0 (github.com/ilrutto2-cmd/realdex)"
+          THUMB=$(curl -sS -A "$UA" https://en.wikipedia.org/api/rest_v1/page/summary/Coccinella_septempunctata | jq -r '.thumbnail.source')
+          IMG=$(echo "$THUMB" | sed -E 's#/[0-9]+px-#/640px-#')
+          echo "사진: $IMG"
+          curl -sSL -A "$UA" "$IMG" -o photo.jpg || curl -sSL -A "$UA" "$THUMB" -o photo.jpg
+          file photo.jpg; ls -la photo.jpg
+
+      - name: Call identify
+        run: |
+          jq -n --arg b "$(base64 -w0 photo.jpg)" '{image_base64:$b, media_type:"image/jpeg"}' > body.json
+          CODE=$(curl -sS -o out.json -w '%{http_code}' -X POST "$SUPABASE_URL/functions/v1/identify" \
+            -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN" -H "content-type: application/json" --data @body.json)
+          echo "HTTP $CODE"
+          jq . out.json || cat out.json
+          {
+            echo "## 판별 서버 점검: HTTP $CODE"
+            echo '```json'; jq . out.json 2>/dev/null || cat out.json; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          [ "$CODE" = "200" ]
