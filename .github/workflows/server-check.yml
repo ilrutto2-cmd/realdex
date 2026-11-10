@@ -3,14 +3,18 @@ name: Server check
 # 배포된 Supabase 판별 함수가 실제로 동작하는지 확인한다.
 # 익명 로그인 → 위키백과 사진으로 identify 호출 → 결과 출력.
 #  - 칠성무당벌레: 기본 도감 종
-#  - 산제비나비: 기본 도감 밖 종(확장 도감 생성 확인)
+#  - 동박새: 기본 도감 밖 종(확장 도감 생성 확인)
 # 실행할 때마다 Anthropic API 사용료가 사진 수만큼 든다.
 on:
   push:
     branches: [main]
     paths:
-      - '.github/workflows/server-check.yml'
+      - '.github/workflows/server-check.yml.manual-only'
   workflow_dispatch:
+    inputs:
+      pages:
+        description: '시험할 위키백과(영문) 문서 이름들, 공백으로 구분'
+        default: 'Coccinella_septempunctata Japanese_white-eye'
 
 env:
   SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL || 'https://fkhcflvpsspgshqqsbai.supabase.co' }}
@@ -34,7 +38,7 @@ jobs:
         run: |
           UA="realdex-server-check/1.0 (github.com/ilrutto2-cmd/realdex)"
           FAIL=0
-          for PAGE in Coccinella_septempunctata Papilio_maackii; do
+          for PAGE in ${{ inputs.pages || 'Coccinella_septempunctata Japanese_white-eye' }}; do
             echo "===== $PAGE ====="
             THUMB=$(curl -sS -A "$UA" "https://en.wikipedia.org/api/rest_v1/page/summary/$PAGE" | jq -r '.thumbnail.source')
             curl -sSL -A "$UA" "$THUMB" -o photo.jpg
