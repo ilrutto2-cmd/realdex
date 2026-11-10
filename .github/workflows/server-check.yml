@@ -14,7 +14,7 @@ on:
     inputs:
       pages:
         description: '시험할 위키백과(영문) 문서 이름들, 공백으로 구분'
-        default: 'Coccinella_septempunctata Japanese_white-eye'
+        default: 'Coccinella_septempunctata Warbling_white-eye'
 
 env:
   SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL || 'https://fkhcflvpsspgshqqsbai.supabase.co' }}
@@ -38,10 +38,11 @@ jobs:
         run: |
           UA="realdex-server-check/1.0 (github.com/ilrutto2-cmd/realdex)"
           FAIL=0
-          for PAGE in ${{ inputs.pages || 'Coccinella_septempunctata Japanese_white-eye' }}; do
+          for PAGE in ${{ inputs.pages || 'Coccinella_septempunctata Warbling_white-eye' }}; do
             echo "===== $PAGE ====="
-            THUMB=$(curl -sS -A "$UA" "https://en.wikipedia.org/api/rest_v1/page/summary/$PAGE" | jq -r '.thumbnail.source')
-            curl -sSL -A "$UA" "$THUMB" -o photo.jpg
+            THUMB=$(curl -sSL -A "$UA" "https://en.wikipedia.org/api/rest_v1/page/summary/$PAGE?redirect=true" | jq -r '.thumbnail.source // empty')
+            if [ -z "$THUMB" ]; then echo "문서에 사진이 없습니다: $PAGE"; FAIL=1; continue; fi
+            curl -sSL -A "$UA" "$THUMB" -o photo.jpg || true
             if ! file photo.jpg | grep -q JPEG; then echo "사진을 받지 못했습니다: $THUMB"; FAIL=1; continue; fi
             jq -n --arg b "$(base64 -w0 photo.jpg)" '{image_base64:$b, media_type:"image/jpeg"}' > body.json
             CODE=$(curl -sS -o out.json -w '%{http_code}' -X POST "$SUPABASE_URL/functions/v1/identify" \
