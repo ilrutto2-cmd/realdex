@@ -185,6 +185,7 @@ const mammals: Row[] = [
 const build = (rows: Row[], group: SpeciesGroup, offset: number): Species[] =>
   rows.map((r, i) => ({
     id: r[0],
+    kind: 'core' as const,
     no: offset + i + 1,
     nameKo: r[1],
     scientificName: r[2],
@@ -207,7 +208,9 @@ export const SPECIES: Species[] = [
 
 export const SPECIES_BY_ID: Record<string, Species> = Object.fromEntries(SPECIES.map((s) => [s.id, s]));
 
-export const GROUP_LABEL: Record<SpeciesGroup, string> = { insect: '곤충', bird: '조류', mammal: '포유류' };
+export const GROUP_LABEL: Record<SpeciesGroup, string> = { insect: '곤충', bird: '조류', mammal: '포유류', other: '기타 동물' };
+
+export const GROUP_ICON: Record<SpeciesGroup, string> = { insect: 'bug', bird: 'bird', mammal: 'paw', other: 'spider' };
 
 export const TIER_LABEL: Record<Tier, string> = {
   common: '흔한 발견',

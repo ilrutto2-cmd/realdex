@@ -2,6 +2,7 @@ import { SPECIES, SPECIES_BY_ID } from './species';
 import type {
   AppState,
   DexEntry,
+  Species,
   LevelInfo,
   MissionDef,
   MissionStatus,
@@ -40,7 +41,14 @@ export const ACHIEVEMENTS: { id: string; title: string; desc: string; icon: stri
   { id: 'bird5', title: '새 관찰자', desc: '조류 5종 발견', icon: 'bird' },
   { id: 'study1', title: '첫 탐구 완료', desc: '생태 탐구를 1종 완료', icon: 'school' },
   { id: 'level5', title: '숲길 탐험가', desc: '탐험 레벨 5 달성', icon: 'medal' },
+  { id: 'ext1', title: '도감 밖 발견', desc: '확장 도감에 1종 등록', icon: 'compass-outline' },
+  { id: 'ext10', title: '미지의 탐험가', desc: '확장 도감에 10종 등록', icon: 'telescope' },
 ];
+
+/** 기본 도감 또는 확장 도감에서 종을 찾는다. */
+export const speciesOf = (state: AppState, id: string): Species | undefined => SPECIES_BY_ID[id] ?? state.extSpecies[id];
+
+export const isCore = (id: string): boolean => !!SPECIES_BY_ID[id];
 
 const TITLES: [number, string][] = [
   [16, '리얼덱스 마스터'],
@@ -139,23 +147,28 @@ export const buildDex = (state: AppState): Record<string, DexEntry> => {
 };
 
 export const collectionRate = (state: AppState): { found: number; total: number; percent: number } => {
-  const found = new Set(state.observations.map((o) => o.speciesId)).size;
+  // 수집률은 기본 도감 기준. 확장 도감은 끝이 없으므로 수집률에 넣지 않는다.
+  const found = new Set(state.observations.map((o) => o.speciesId).filter(isCore)).size;
   const total = SPECIES.length;
   return { found, total, percent: Math.round((found / total) * 100) };
 };
 
 const computeAchievements = (state: AppState): string[] => {
   const ids = new Set(state.observations.map((o) => o.speciesId));
-  const count = (g: string) => [...ids].filter((id) => SPECIES_BY_ID[id]?.group === g).length;
+  const count = (g: string) => [...ids].filter((id) => speciesOf(state, id)?.group === g).length;
+  const coreFound = [...ids].filter(isCore).length;
+  const extFound = ids.size - coreFound;
   const earned: string[] = [];
   if (ids.size >= 1) earned.push('first');
   if (ids.size >= 5) earned.push('species5');
   if (ids.size >= 10) earned.push('species10');
-  if (ids.size >= 25) earned.push('species25');
+  if (coreFound >= 25) earned.push('species25');
   if (count('insect') >= 5) earned.push('insect5');
   if (count('bird') >= 5) earned.push('bird5');
   if (Object.keys(state.studies).length >= 1) earned.push('study1');
   if (levelInfo(totalXp(state)).level >= 5) earned.push('level5');
+  if (extFound >= 1) earned.push('ext1');
+  if (extFound >= 10) earned.push('ext10');
   return earned;
 };
 
@@ -195,7 +208,11 @@ export const registerObservation = (
     },
   });
 
-  if (!SPECIES_BY_ID[input.speciesId]) return fail('unknown_species');
+  // 확장 종은 서버가 판별해 넘겨준 종 정보가 있거나, 이미 받아 둔 종이어야 한다.
+  const ext = !isCore(input.speciesId)
+    ? (state.extSpecies[input.speciesId] ?? (input.ext && input.ext.id === input.speciesId && input.ext.kind === 'ext' ? input.ext : undefined))
+    : undefined;
+  if (!isCore(input.speciesId) && !ext) return fail('unknown_species');
   // 같은 사진을 다시 올려 점수를 얻는 것을 막는다.
   if (state.observations.some((o) => o.photoHash === input.photoHash)) return fail('duplicate_photo');
 
@@ -227,7 +244,12 @@ export const registerObservation = (
     }
   }
 
-  let next: AppState = { ...state, observations: [...state.observations, observation], xpEvents: xp.events };
+  let next: AppState = {
+    ...state,
+    observations: [...state.observations, observation],
+    xpEvents: xp.events,
+    extSpecies: ext && !state.extSpecies[ext.id] ? { ...state.extSpecies, [ext.id]: ext } : state.extSpecies,
+  };
   const ach = withAchievements(next, now);
   next = ach.state;
 
@@ -294,8 +316,9 @@ export const buildQuiz = (speciesId: string): QuizQuestion[] => {
 };
 
 export const canStudy = (state: AppState, speciesId: string): boolean => {
+  // 생태 탐구 퀴즈는 검수한 설명이 있는 기본 도감 종에만 둔다.
   const entry = buildDex(state)[speciesId];
-  return !!entry && entry.stage === 2 && !state.studies[speciesId];
+  return isCore(speciesId) && !!entry && entry.stage === 2 && !state.studies[speciesId];
 };
 
 export const completeStudy = (
@@ -327,7 +350,7 @@ export const missionStatuses = (state: AppState, now: Date): MissionStatus[] => 
     if (!cur || o.localDate < cur) firstDateBySpecies.set(o.speciesId, o.localDate);
   }
   const distinct = (list: Observation[]) => new Set(list.map((o) => o.speciesId));
-  const weekGroups = new Set([...distinct(obsWeek)].map((id) => SPECIES_BY_ID[id]?.group));
+  const weekGroups = new Set([...distinct(obsWeek)].map((id) => speciesOf(state, id)?.group));
 
   const progressOf = (id: string): number => {
     switch (id) {

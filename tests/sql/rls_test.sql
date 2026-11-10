@@ -6,7 +6,12 @@ do $$ begin
   assert (select count(*) from public.profiles) = 2, '가입 시 프로필이 생성되어야 한다';
   assert (select count(*) from public.species) = 51, '종 51건';
   assert (select count(*) from public.missions) = 6, '미션 6건';
+  assert (select count(*) from public.species where kind = 'core') = 51, '기본 도감 종은 core';
 end $$;
+
+-- 서버 함수(서비스 권한)는 확장 종을 추가할 수 있다
+insert into public.species (id, no, name_ko, scientific_name, group_key, taxon, tier, feature, habitat, season, role, similar_note, kind)
+  values ('x-araneus-ventricosus', 1001, '산왕거미', 'Araneus ventricosus', 'other', '거미목 왕거미과', 'explore', 'f', 'h', 's', 'r', 'n', 'ext');
 
 -- 사용자 A
 set role authenticated;
@@ -76,6 +81,19 @@ begin
   exception when insufficient_privilege then failed := true; end;
   assert failed, 'identify_calls는 클라이언트 접근 불가';
 
+  -- 확장 종을 관찰 기록에 쓸 수 있다
+  insert into public.observations (id, species_id, observed_at, local_date, photo_hash, source)
+    values ('10000000-0000-0000-0000-000000000009', 'x-araneus-ventricosus', now(), current_date, 'hash-ext', 'ai');
+  delete from public.observations where id = '10000000-0000-0000-0000-000000000009';
+
+  -- 클라이언트는 종을 추가할 수 없다
+  failed := false;
+  begin
+    insert into public.species (id, no, name_ko, scientific_name, group_key, taxon, tier, feature, habitat, season, role, similar_note, kind)
+      values ('x-fake', 9999, '가짜', 'Fakus fakus', 'other', 't', 'explore', 'f', 'h', 's', 'r', 'n', 'ext');
+  exception when insufficient_privilege then failed := true; end;
+  assert failed, '클라이언트는 종을 추가할 수 없어야 한다';
+
   -- 종 정보는 읽기 전용
   failed := false;
   begin
@@ -101,7 +119,7 @@ begin
   update public.dex_progress set stage = 3 where true;
   get diagnostics n = row_count;
   assert n = 0, 'B는 A의 도감을 고칠 수 없다';
-  assert (select count(*) from public.species) = 51, '종 정보는 누구나 읽는다';
+  assert (select count(*) from public.species) = 52, '종 정보는 누구나 읽는다';
 end $$;
 
 -- 로그인하지 않은 사용자
@@ -110,7 +128,7 @@ reset request.jwt.claim.sub;
 do $$
 declare failed boolean := false;
 begin
-  assert (select count(*) from public.species) = 51, '비로그인도 종 정보는 읽는다';
+  assert (select count(*) from public.species) = 52, '비로그인도 종 정보는 읽는다';
   begin
     perform 1 from public.observations;
   exception when insufficient_privilege then failed := true; end;

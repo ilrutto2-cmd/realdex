@@ -274,6 +274,29 @@ const cloudScenario = async (browser: Browser, mock: MockBackend) => {
   await click(page, 'tab-my');
   check('B16 마이페이지 통계', (await text(page, 'stat-species')) === '1종' && (await text(page, 'stat-observations')) === '4건' && (await text(page, 'cloud-status')).includes('연결됨'));
   await shot(page, 'b16-my');
+  // 확장 도감: 기본 도감 밖의 거미
+  mock.setMode('spider');
+  await shootPhoto(page);
+  await visible(page, 'result-view', 30000);
+  check('B18 도감 밖 종은 확장 도감 후보로 표시', (await text(page, 'candidate-0')).includes('확장 도감') && (await text(page, 'candidate-1')).includes('종 확정 불가'));
+  await shot(page, 'b18-ext-result');
+  check('B18 등록 버튼', (await text(page, 'register')).includes('산왕거미로 확장 도감에 등록'));
+  await click(page, 'register');
+  check('B19 확장 종 신규 발견 +100', (await text(page, 'reveal-name')) === '산왕거미' && (await text(page, 'reveal-xp')).includes('+100'));
+  await click(page, 'reveal-open-card');
+  check('B19 확장 종 카드 안내', (await text(page, 'ext-banner')).includes('AI가 작성') && (await text(page, 'species-name')) === '산왕거미' && !(await exists(page, 'start-quiz')));
+  await shot(page, 'b19-ext-card');
+  await back(page);
+  await click(page, 'tab-dex');
+  check('B20 수집률은 그대로, 확장 도감 1종', (await text(page, 'dex-rate')).startsWith('1 / 51') && (await text(page, 'filter-ext')).includes('1종'));
+  await click(page, 'filter-ext');
+  check('B20 확장 도감 탭에 카드', await exists(page, 'dex-card-x-araneus-ventricosus'));
+  await shot(page, 'b20-ext-dex');
+  await page.reload({ waitUntil: 'networkidle0' });
+  await click(page, 'tab-dex');
+  check('B21 다시 열어도 확장 도감 유지', (await text(page, 'filter-ext')).includes('1종'));
+  await click(page, 'tab-my');
+
   await click(page, 'wipe');
   await visible(page, 'my-message');
   s = await state(page);

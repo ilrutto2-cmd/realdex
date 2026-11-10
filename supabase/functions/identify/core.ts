@@ -20,6 +20,25 @@ export interface Candidate {
   /** 모델의 자체 판단. 검증된 확률이 아니다. */
   assessment: Assessment;
   reasoning: string;
+  /** 도감 밖 종을 확실히 판별했을 때 서버가 붙이는 확장 도감 종 정보. 없으면 null */
+  ext: ExtSpecies | null;
+}
+
+export type ExtGroup = 'insect' | 'bird' | 'mammal' | 'other';
+
+/** 확장 도감 종. 설명은 AI가 처음 한 번 작성해 DB에 저장하고 모든 사용자가 같이 쓴다. */
+export interface ExtSpecies {
+  id: string;
+  nameKo: string;
+  scientificName: string;
+  group: ExtGroup;
+  taxon: string;
+  feature: string;
+  habitat: string;
+  season: string;
+  role: string;
+  similar: string;
+  isProtected: boolean;
 }
 
 export interface IdentifyResult {
@@ -112,6 +131,7 @@ export const normalize = (raw: unknown, catalog: CatalogItem[], model: string): 
   if (!raw || typeof raw !== 'object') throw new IdentifyError('bad_model_output', '판별 결과 형식이 올바르지 않습니다.');
   const r = raw as Record<string, unknown>;
   const byId = new Map(catalog.map((c) => [c.id, c]));
+  const bySci = new Map(catalog.map((c) => [c.scientificName.toLowerCase(), c]));
   const quality: Quality = QUALITIES.includes(r.image_quality as Quality) ? (r.image_quality as Quality) : 'ok';
   const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 
@@ -126,7 +146,9 @@ export const normalize = (raw: unknown, catalog: CatalogItem[], model: string): 
     const assessment: Assessment = ASSESSMENTS.includes(c.assessment as Assessment)
       ? (c.assessment as Assessment)
       : 'needs_check';
-    const inCatalog = typeof c.catalog_id === 'string' ? byId.get(c.catalog_id) : undefined;
+    // 모델이 id를 빠뜨려도 학명이 도감 종과 같으면 도감 종으로 본다.
+    const inCatalog =
+      (typeof c.catalog_id === 'string' ? byId.get(c.catalog_id) : undefined) ?? bySci.get(scientificName.toLowerCase());
     // 종 단계가 아니거나 목록에 없는 id는 도감 등록 대상으로 인정하지 않는다.
     const catalogItem = rank === 'species' ? inCatalog : undefined;
     candidates.push({
@@ -136,6 +158,7 @@ export const normalize = (raw: unknown, catalog: CatalogItem[], model: string): 
       rank,
       assessment,
       reasoning: str(c.reasoning) ?? '',
+      ext: null,
     });
     if (candidates.length === 3) break;
   }
@@ -154,38 +177,34 @@ export const normalize = (raw: unknown, catalog: CatalogItem[], model: string): 
   };
 };
 
-export const identifyImage = async (args: IdentifyArgs): Promise<IdentifyResult> => {
-  const { imageBase64, mediaType, catalog, apiKey, model } = args;
-  const doFetch = args.fetchImpl ?? fetch;
-  if (typeof imageBase64 !== 'string' || imageBase64.length < 100) {
-    throw new IdentifyError('bad_request', '이미지가 없습니다.');
-  }
-  if (imageBase64.length > MAX_BASE64_LENGTH) throw new IdentifyError('bad_request', '이미지가 너무 큽니다.');
-  if (!MEDIA_TYPES.includes(mediaType)) throw new IdentifyError('bad_request', '지원하지 않는 이미지 형식입니다.');
+interface ClaudeCall {
+  apiKey: string;
+  model: string;
+  system: string;
+  content: unknown[];
+  schema: unknown;
+  maxTokens: number;
+  fetchImpl?: typeof fetch;
+}
 
+/** Messages API를 JSON 스키마 형식으로 호출하고, 파싱한 결과를 돌려준다. */
+const callClaude = async (c: ClaudeCall): Promise<unknown> => {
+  const doFetch = c.fetchImpl ?? fetch;
   let res: Response;
   try {
     res = await doFetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'x-api-key': apiKey,
+        'x-api-key': c.apiKey,
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        model,
-        max_tokens: 1200,
-        system: buildSystemPrompt(catalog),
-        output_config: { format: { type: 'json_schema', schema: RESULT_SCHEMA } },
-        messages: [
-          {
-            role: 'user',
-            content: [
-              { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
-              { type: 'text', text: '이 사진 속 생물을 판별해 정해진 JSON 형식으로만 답해 줘.' },
-            ],
-          },
-        ],
+        model: c.model,
+        max_tokens: c.maxTokens,
+        system: c.system,
+        output_config: { format: { type: 'json_schema', schema: c.schema } },
+        messages: [{ role: 'user', content: c.content }],
       }),
     });
   } catch {
@@ -212,11 +231,110 @@ export const identifyImage = async (args: IdentifyArgs): Promise<IdentifyResult>
   if (!text || body.stop_reason === 'refusal') {
     throw new IdentifyError('bad_model_output', '판별 결과를 받지 못했습니다.');
   }
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    return JSON.parse(text);
   } catch {
     throw new IdentifyError('bad_model_output', '판별 결과 형식이 올바르지 않습니다.');
   }
+};
+
+export const identifyImage = async (args: IdentifyArgs): Promise<IdentifyResult> => {
+  const { imageBase64, mediaType, catalog, apiKey, model } = args;
+  if (typeof imageBase64 !== 'string' || imageBase64.length < 100) {
+    throw new IdentifyError('bad_request', '이미지가 없습니다.');
+  }
+  if (imageBase64.length > MAX_BASE64_LENGTH) throw new IdentifyError('bad_request', '이미지가 너무 큽니다.');
+  if (!MEDIA_TYPES.includes(mediaType)) throw new IdentifyError('bad_request', '지원하지 않는 이미지 형식입니다.');
+
+  const parsed = await callClaude({
+    apiKey,
+    model,
+    system: buildSystemPrompt(catalog),
+    schema: RESULT_SCHEMA,
+    maxTokens: 1200,
+    fetchImpl: args.fetchImpl,
+    content: [
+      { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
+      { type: 'text', text: '이 사진 속 생물을 판별해 정해진 JSON 형식으로만 답해 줘.' },
+    ],
+  });
   return normalize(parsed, catalog, model);
+};
+
+// ---------- 확장 도감 ----------
+
+const EXT_GROUPS: ExtGroup[] = ['insect', 'bird', 'mammal', 'other'];
+
+/** 확장 도감에 올릴 수 있는 후보: 도감 밖, 종 단계, AI가 '유력'으로 판단, 학명이 이명법 형식. */
+export const isExtEligible = (c: Candidate): boolean =>
+  !c.catalogId && c.rank === 'species' && c.assessment === 'likely' && /^[A-Z][a-z]+ [a-z][a-z-]+$/.test(c.scientificName);
+
+/** 학명에서 만드는 확장 종 id. 같은 종은 누가 찍어도 같은 id가 된다. */
+export const extSpeciesId = (scientificName: string): string =>
+  `x-${scientificName.trim().toLowerCase().replace(/[^a-z]+/g, '-').replace(/^-|-$/g, '')}`;
+
+const INFO_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    is_animal_species: { type: 'boolean', description: '학명이 실제로 존재하는 동물 종이면 true. 확신이 없으면 false' },
+    name_ko: { type: ['string', 'null'], description: '국내에서 통용되는 표준 국명. 없거나 모르면 null (지어내지 말 것)' },
+    group: { type: 'string', enum: EXT_GROUPS, description: '곤충, 조류, 포유류, 그 밖의 동물(거미·양서류·파충류·어류 등)' },
+    taxon: { type: 'string', description: '한국어 목·과 이름. 예: 딱정벌레목 무당벌레과' },
+    feature: { type: 'string', description: '눈으로 알아볼 수 있는 생김새 한두 문장' },
+    habitat: { type: 'string', description: '국내에서 주로 볼 수 있는 곳, 짧게' },
+    season: { type: 'string', description: '주로 보이는 시기, 짧게' },
+    role: { type: 'string', description: '생태계에서 하는 일 한 문장' },
+    similar: { type: 'string', description: '비슷한 종과 구별하는 방법 한 문장' },
+    is_protected: { type: 'boolean', description: '국내 법정 보호종(천연기념물·멸종위기 야생생물)이면 true' },
+  },
+  required: ['is_animal_species', 'name_ko', 'group', 'taxon', 'feature', 'habitat', 'season', 'role', 'similar', 'is_protected'],
+} as const;
+
+const INFO_SYSTEM = `너는 한국 생물 도감 앱의 종 설명을 쓰는 편집자다. 독자는 어린이를 포함한 일반인이다.
+- 널리 알려진 사실만 쓴다. 모르는 것은 일반적인 표현으로 짧게 쓰고 꾸며내지 않는다.
+- 국명은 국내에서 실제로 쓰는 표준 국명만 적는다. 모르면 null로 둔다.
+- 생물을 만지거나 가까이 다가가라는 내용은 쓰지 않는다.
+- 모든 설명은 한국어로, 각 항목 한두 문장으로 쓴다.`;
+
+/** 확장 도감 종 설명을 만든다. 실제 종이 아니라고 판단되면 null. */
+export const generateSpeciesInfo = async (args: {
+  scientificName: string;
+  nameKoHint: string;
+  apiKey: string;
+  model: string;
+  fetchImpl?: typeof fetch;
+}): Promise<ExtSpecies | null> => {
+  const raw = (await callClaude({
+    apiKey: args.apiKey,
+    model: args.model,
+    system: INFO_SYSTEM,
+    schema: INFO_SCHEMA,
+    maxTokens: 900,
+    fetchImpl: args.fetchImpl,
+    content: [
+      {
+        type: 'text',
+        text: `학명: ${args.scientificName}\n판별 도구가 제안한 국명: ${args.nameKoHint}\n이 종의 도감 설명을 정해진 JSON 형식으로 써 줘.`,
+      },
+    ],
+  })) as Record<string, unknown> | null;
+  if (!raw || raw.is_animal_species !== true) return null;
+  const str = (v: unknown, max = 300): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+  const required = ['taxon', 'feature', 'habitat', 'season', 'role', 'similar'].map((k) => str(raw[k]));
+  if (required.some((v) => v.length === 0)) return null;
+  const [taxon, feature, habitat, season, role, similar] = required;
+  return {
+    id: extSpeciesId(args.scientificName),
+    nameKo: str(raw.name_ko, 40) || args.scientificName,
+    scientificName: args.scientificName,
+    group: EXT_GROUPS.includes(raw.group as ExtGroup) ? (raw.group as ExtGroup) : 'other',
+    taxon,
+    feature,
+    habitat,
+    season,
+    role,
+    similar,
+    isProtected: raw.is_protected === true,
+  };
 };

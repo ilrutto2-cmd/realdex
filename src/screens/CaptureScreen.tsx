@@ -18,9 +18,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { nextMission } from '../domain/rules';
+import type { Species } from '../domain/types';
 import { GROUP_LABEL, SPECIES, SPECIES_BY_ID } from '../domain/species';
 import type { RootNav } from '../navigation';
-import { identifyPhoto, type Candidate, type IdentifyResult } from '../services/identify';
+import { extToSpecies, identifyPhoto, type Candidate, type IdentifyResult } from '../services/identify';
 import { getRegion } from '../services/location';
 import { persistPhoto, preparePhoto, type PreparedPhoto } from '../services/photos';
 import { cloudEnabled } from '../services/supabase';
@@ -68,6 +69,16 @@ export const CaptureScreen = () => {
     setQuery('');
   }, []);
 
+  /** 후보가 등록 가능하면 그 종 id(기본 도감 id 또는 확장 종 id), 아니면 null. */
+  const candidateSpeciesId = (c: Candidate): string | null => c.catalogId ?? extToSpecies(c.ext)?.id ?? null;
+
+  /** 선택한 id의 종 정보: 기본 도감 → 이번 판별의 확장 종 → 전에 받아 둔 확장 종 순서로 찾는다. */
+  const resolveSelected = (result: IdentifyResult, id: string): Species | null =>
+    SPECIES_BY_ID[id] ??
+    extToSpecies(result.candidates.find((c) => c.ext?.id === id)?.ext) ??
+    store.state.extSpecies[id] ??
+    null;
+
   /** 사진 한 장을 받아 판별까지 진행한다. */
   const analyze = useCallback(
     async (uri: string, prepared?: PreparedPhoto) => {
@@ -92,8 +103,8 @@ export const CaptureScreen = () => {
       }
       const outcome = await identifyPhoto(photo.base64);
       if (outcome.kind === 'ok') {
-        const first = outcome.result.candidates.find((c) => c.catalogId);
-        setSelected(first?.catalogId ?? null);
+        const first = outcome.result.candidates.map(candidateSpeciesId).find(Boolean);
+        setSelected(first ?? null);
         setPhase({ k: 'result', photo, result: outcome.result });
       } else {
         setPhase({ k: 'error', photo, uri, message: outcome.message, retryable: outcome.code !== 'rate_limit' && outcome.code !== 'not_configured' });
@@ -122,12 +133,13 @@ export const CaptureScreen = () => {
   }, [analyze]);
 
   const registerSelected = useCallback(
-    async (photo: PreparedPhoto, speciesId: string, source: 'ai' | 'manual_demo', protectedMaybe: boolean) => {
+    async (photo: PreparedPhoto, sp: Species, source: 'ai' | 'manual_demo', protectedMaybe: boolean) => {
+      const speciesId = sp.id;
       if (saving) return;
       setSaving(true);
       try {
         // 보호종 가능성이 있으면 위치를 아예 기록하지 않는다.
-        const region = store.state.settings.recordRegion && !protectedMaybe ? await getRegion() : null;
+        const region = store.state.settings.recordRegion && !protectedMaybe && !sp.isProtected ? await getRegion() : null;
         const id = Crypto.randomUUID();
         const photoUri = await persistPhoto(photo, id);
         const result = await store.register({
@@ -139,13 +151,14 @@ export const CaptureScreen = () => {
           lat: region?.lat ?? null,
           lng: region?.lng ?? null,
           source,
+          ext: sp.kind === 'ext' ? sp : undefined,
         });
         if (!result.ok) {
           setNotice(result.reason === 'duplicate_photo' ? '이미 등록한 사진입니다.' : '도감에 없는 종이라 등록할 수 없습니다.');
           return;
         }
         setReveal({
-          species: SPECIES_BY_ID[speciesId],
+          species: sp,
           photoUri,
           result,
           levelTitle: '',
@@ -257,14 +270,15 @@ export const CaptureScreen = () => {
 
   // ---------- 판별 결과 ----------
   const renderCandidate = (c: Candidate, index: number) => {
-    const registerable = !!c.catalogId;
-    const active = registerable && selected === c.catalogId;
+    const cid = candidateSpeciesId(c);
+    const registerable = !!cid;
+    const active = registerable && selected === cid;
     return (
       <Pressable
         key={`${c.scientificName}-${index}`}
         testID={`candidate-${index}`}
         disabled={!registerable}
-        onPress={() => setSelected(c.catalogId)}
+        onPress={() => setSelected(cid)}
         accessibilityRole="radio"
         accessibilityState={{ selected: active, disabled: !registerable }}
         style={[styles.candidate, active && styles.candidateActive, !registerable && { opacity: 0.75 }]}
@@ -279,7 +293,8 @@ export const CaptureScreen = () => {
         <View style={styles.tagRow}>
           <Tag label={ASSESS_LABEL[c.assessment]} bg={c.assessment === 'likely' ? C.mint : C.amberSoft} color={c.assessment === 'likely' ? C.forest : '#7A5206'} />
           <Tag label={RANK_LABEL[c.rank]} bg={C.line} color={C.sub} />
-          {!registerable ? <Tag label={c.rank === 'species' ? '도감 미수록' : '종 확정 불가'} bg={C.line} color={C.sub} /> : null}
+          {c.ext ? <Tag label="확장 도감" bg={C.amberSoft} color="#7A5206" /> : null}
+          {!registerable ? <Tag label={c.rank !== 'species' ? '종 확정 불가' : c.assessment !== 'likely' ? '확실하지 않아 등록 불가' : '도감 미수록'} bg={C.line} color={C.sub} /> : null}
         </View>
         {c.reasoning ? <Text style={styles.reason}>{c.reasoning}</Text> : null}
       </Pressable>
@@ -287,7 +302,7 @@ export const CaptureScreen = () => {
   };
 
   const renderResult = (photo: PreparedPhoto, result: IdentifyResult) => {
-    const sp = selected ? SPECIES_BY_ID[selected] : null;
+    const sp = selected ? resolveSelected(result, selected) : null;
     const none = result.status !== 'ok';
     return (
       <ScrollView contentContainerStyle={styles.sheet} testID="result-view">
@@ -320,6 +335,9 @@ export const CaptureScreen = () => {
             {result.retakeAdvice ? <Banner icon="camera" text={result.retakeAdvice} /> : null}
             {sp ? (
               <View style={styles.speciesInfo}>
+                {sp.kind === 'ext' ? (
+                  <Text style={styles.extNote}>기본 도감 밖의 생물이에요. 아래 설명은 AI가 작성했고 사람이 검수하지 않았습니다.</Text>
+                ) : null}
                 <Text style={styles.infoLabel}>이렇게 생겼는지 확인해 보세요</Text>
                 <Text style={styles.infoText}>{sp.feature}</Text>
                 <Text style={styles.infoLabel}>비슷한 종과 구별</Text>
@@ -337,10 +355,10 @@ export const CaptureScreen = () => {
           {sp && !none ? (
             <Button
               testID="register"
-              label={saving ? '등록 중…' : `${sp.nameKo}로 도감에 등록`}
+              label={saving ? '등록 중…' : `${sp.nameKo}로 ${sp.kind === 'ext' ? '확장 도감에' : '도감에'} 등록`}
               icon="book-open-variant"
               disabled={saving}
-              onPress={() => void registerSelected(photo, sp.id, 'ai', result.possiblyProtected)}
+              onPress={() => void registerSelected(photo, sp, 'ai', result.possiblyProtected)}
             />
           ) : null}
           <Button testID="retake" label="다시 촬영" icon="camera" kind="ghost" onPress={reset} />
@@ -413,7 +431,7 @@ export const CaptureScreen = () => {
             label={saving ? '등록 중…' : sp ? `${sp.nameKo}로 등록 (직접 선택)` : '생물을 선택해 주세요'}
             icon="book-open-variant"
             disabled={!sp || saving}
-            onPress={() => sp && void registerSelected(photo, sp.id, 'manual_demo', false)}
+            onPress={() => sp && void registerSelected(photo, sp, 'manual_demo', false)}
           />
           <Button testID="retake" label="다시 촬영" icon="camera" kind="ghost" onPress={reset} />
         </View>
@@ -523,6 +541,7 @@ const styles = StyleSheet.create({
   speciesInfo: { backgroundColor: C.surface, borderRadius: R.md, borderWidth: 1, borderColor: C.line, padding: 14, gap: 4 },
   infoLabel: { fontSize: 11, fontWeight: '800', color: C.green, marginTop: 6 },
   infoText: { fontSize: 14, lineHeight: 20, color: C.ink },
+  extNote: { fontSize: 12, lineHeight: 18, color: '#7A5206', backgroundColor: C.amberSoft, padding: 8, borderRadius: R.sm },
   actions: { gap: 10 },
   search: {
     flexDirection: 'row',

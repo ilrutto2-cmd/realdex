@@ -12,7 +12,7 @@ import {
   type TextStyle,
   type ViewStyle,
 } from 'react-native';
-import type { Stage } from '../domain/types';
+import type { Species, Stage } from '../domain/types';
 import { C, R, shadow, STAGE_STYLE } from './theme';
 
 export type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
@@ -193,3 +193,6 @@ const styles = StyleSheet.create({
   banner: { flexDirection: 'row', gap: 8, padding: 12, borderRadius: R.md, alignItems: 'flex-start' },
   bannerText: { flex: 1, fontSize: 13, lineHeight: 19, fontWeight: '600' },
 });
+
+/** 카드에 표시하는 도감 번호. 확장 도감 종은 번호 대신 '확장'. */
+export const speciesNumber = (sp: Species): string => (sp.kind === 'ext' ? '확장 도감' : `No.${String(sp.no).padStart(3, '0')}`);

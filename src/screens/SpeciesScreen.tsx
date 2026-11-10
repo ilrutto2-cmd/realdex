@@ -1,18 +1,18 @@
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import React from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { canStudy } from '../domain/rules';
-import { GROUP_LABEL, SPECIES_BY_ID, TIER_LABEL } from '../domain/species';
+import { canStudy, speciesOf } from '../domain/rules';
+import { GROUP_LABEL, TIER_LABEL } from '../domain/species';
 import type { RootNav, RootStackParamList } from '../navigation';
 import { useStore } from '../state/store';
-import { Banner, Button, confirm, formatDate, H, Icon, Panel, StageStars, Tag } from '../ui/components';
+import { Banner, Button, confirm, formatDate, H, Icon, Panel, speciesNumber, StageStars, Tag } from '../ui/components';
 import { C, R, STAGE_STYLE } from '../ui/theme';
 
 export const SpeciesScreen = () => {
   const { params } = useRoute<RouteProp<RootStackParamList, 'Species'>>();
   const navigation = useNavigation<RootNav>();
   const { state, dex, removeObservation } = useStore();
-  const sp = SPECIES_BY_ID[params.id];
+  const sp = speciesOf(state, params.id);
   const entry = dex[params.id];
 
   if (!sp) {
@@ -31,7 +31,7 @@ export const SpeciesScreen = () => {
             <Icon name={sp.icon} size={130} color="#31443A" />
           </View>
           <View style={styles.cardBody}>
-            <Text style={styles.no}>No.{String(sp.no).padStart(3, '0')}</Text>
+            <Text style={styles.no}>{speciesNumber(sp)}</Text>
             <Text style={styles.name}>???</Text>
             <View style={styles.tags}>
               <Tag label={GROUP_LABEL[sp.group]} />
@@ -57,6 +57,7 @@ export const SpeciesScreen = () => {
     .sort((a, b) => b.observedAt.localeCompare(a.observedAt));
   const studyReady = canStudy(state, sp.id);
   const hasManual = history.some((o) => o.source === 'manual_demo');
+  const isExt = sp.kind === 'ext';
 
   const remove = async (id: string) => {
     const last = history.length === 1;
@@ -78,7 +79,7 @@ export const SpeciesScreen = () => {
         <Image source={{ uri: entry.coverPhotoUri }} style={styles.photo} resizeMode="cover" />
         <View style={styles.cardBody}>
           <View style={styles.rowBetween}>
-            <Text style={styles.no}>No.{String(sp.no).padStart(3, '0')}</Text>
+            <Text style={styles.no}>{speciesNumber(sp)}</Text>
             <StageStars stage={entry.stage} size={16} />
           </View>
           <Text style={styles.name} testID="species-name">
@@ -87,8 +88,8 @@ export const SpeciesScreen = () => {
           <Text style={styles.sci}>{sp.scientificName}</Text>
           <View style={styles.tags}>
             <Tag label={GROUP_LABEL[sp.group]} />
-            <Tag label={sp.taxon} bg={C.line} color={C.sub} />
-            <Tag label={TIER_LABEL[sp.tier]} bg={C.amberSoft} color="#7A5206" />
+            {sp.taxon ? <Tag label={sp.taxon} bg={C.line} color={C.sub} /> : null}
+            {isExt ? <Tag label="확장 도감" bg={C.amberSoft} color="#7A5206" /> : <Tag label={TIER_LABEL[sp.tier]} bg={C.amberSoft} color="#7A5206" />}
           </View>
           <View style={styles.stats}>
             <Stat label="첫 발견" value={formatDate(entry.firstObservedAt)} />
@@ -101,6 +102,15 @@ export const SpeciesScreen = () => {
         </View>
       </View>
 
+      {isExt ? (
+        <Banner
+          testID="ext-banner"
+          icon="compass-outline"
+          tone="warn"
+          text="확장 도감 생물입니다. AI가 종까지 확실하다고 판별한 기록이며, 아래 설명은 AI가 작성해 사람이 검수하지 않았습니다. 수집률에는 포함되지 않습니다."
+        />
+      ) : null}
+
       {hasManual ? (
         <Banner icon="flask-outline" tone="warn" text="데모 모드에서 직접 선택해 등록한 기록이 포함되어 있습니다. AI 판별을 거치지 않았습니다." />
       ) : null}
@@ -109,7 +119,9 @@ export const SpeciesScreen = () => {
         <H>도감 성장</H>
         <Step done label="1단계 · 최초 발견" desc="도감 카드 해금" />
         <Step done={entry.stage >= 2} label="2단계 · 재관찰" desc="다른 날이나 다른 지역에서 한 번 더 관찰하기" />
-        <Step done={entry.stage >= 3} label="3단계 · 생태 탐구" desc="탐구 퀴즈 3문제를 모두 맞히기 (+300 경험치)" />
+        {isExt ? null : (
+          <Step done={entry.stage >= 3} label="3단계 · 생태 탐구" desc="탐구 퀴즈 3문제를 모두 맞히기 (+300 경험치)" />
+        )}
         {studyReady ? (
           <Button testID="start-quiz" label="생태 탐구 시작" icon="school" kind="amber" onPress={() => navigation.navigate('Quiz', { id: sp.id })} style={{ marginTop: 8 }} />
         ) : null}

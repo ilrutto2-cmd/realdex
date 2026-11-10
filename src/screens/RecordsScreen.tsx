@@ -2,7 +2,7 @@ import { useNavigation } from '@react-navigation/native';
 import React, { useMemo } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SPECIES_BY_ID } from '../domain/species';
+import { speciesOf } from '../domain/rules';
 import type { Observation } from '../domain/types';
 import type { RootNav } from '../navigation';
 import { useStore } from '../state/store';
@@ -59,7 +59,8 @@ export const RecordsScreen = () => {
               </Text>
             </View>
             {g.list.map((o) => {
-              const sp = SPECIES_BY_ID[o.speciesId];
+              const sp = speciesOf(state, o.speciesId);
+              if (!sp) return null;
               return (
                 <Pressable
                   key={o.id}

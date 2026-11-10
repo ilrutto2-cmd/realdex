@@ -28,6 +28,8 @@ export const QuizScreen = () => {
     }
   };
 
+  if (!sp) return null;
+
   if (status === 'done') {
     return (
       <View style={styles.center} testID="quiz-done">

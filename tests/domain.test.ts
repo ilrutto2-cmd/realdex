@@ -237,3 +237,60 @@ describe('미션', () => {
     expect(m!.completed).toBe(false);
   });
 });
+
+describe('확장 도감', () => {
+  const spider: import('../src/domain/types').Species = {
+    id: 'x-araneus-ventricosus',
+    kind: 'ext',
+    no: 1001,
+    nameKo: '산왕거미',
+    scientificName: 'Araneus ventricosus',
+    group: 'other',
+    taxon: '거미목 왕거미과',
+    tier: 'explore',
+    icon: 'spider',
+    feature: '큰 둥근 거미줄을 친다.',
+    habitat: '숲 가장자리, 처마 밑',
+    season: '여름~가을',
+    role: '날벌레를 잡아먹는다.',
+    similar: '왕거미와 비슷하다.',
+  };
+  const regExt = (s: AppState, hash: string, when: Date, ext?: typeof spider) =>
+    registerObservation(s, { ...input(spider.id, hash), ext }, when, makeId);
+
+  it('서버가 준 종 정보와 함께면 등록되고, 종 정보가 저장된다', () => {
+    const r = regExt(emptyState(), 'e1', at(2026, 11, 10), spider);
+    expect(r.result).toMatchObject({ ok: true, isNewSpecies: true, xpGained: 100 });
+    expect(r.state.extSpecies[spider.id]).toEqual(spider);
+    expect(r.result.newAchievements).toContain('ext1');
+  });
+  it('종 정보 없이 모르는 id는 등록할 수 없다', () => {
+    expect(regExt(emptyState(), 'e1', at(2026, 11, 10)).result.reason).toBe('unknown_species');
+  });
+  it('기본 종을 확장 종으로 위장할 수 없다', () => {
+    const fake = { ...spider, id: 'x-other', kind: 'ext' as const };
+    expect(regExt(emptyState(), 'e1', at(2026, 11, 10), fake).result.reason).toBe('unknown_species');
+    const coreKind = { ...spider, kind: 'core' as const };
+    expect(regExt(emptyState(), 'e1', at(2026, 11, 10), coreKind).result.reason).toBe('unknown_species');
+  });
+  it('한 번 받은 확장 종은 다음부터 종 정보 없이도 재관찰된다', () => {
+    let s = regExt(emptyState(), 'e1', at(2026, 11, 10), spider).state;
+    const r = regExt(s, 'e2', at(2026, 11, 11));
+    expect(r.result).toMatchObject({ ok: true, isNewSpecies: false, xpGained: 10, stageAfter: 2 });
+  });
+  it('수집률은 기본 도감 기준, 확장 종은 미션에는 반영', () => {
+    const day = at(2026, 11, 10);
+    let s = regExt(emptyState(), 'e1', day, spider).state;
+    expect(collectionRate(s)).toMatchObject({ found: 0, total: 51 });
+    s = reg(s, LADYBUG, 'h1', day).state;
+    expect(collectionRate(s).found).toBe(1);
+    const st = Object.fromEntries(missionStatuses(s, day).map((m) => [m.id, m]));
+    expect(st.d_new.progress).toBe(1); // 목표 1, 2종 발견
+    expect(st.d_three.progress).toBe(2);
+  });
+  it('확장 종은 생태 탐구 대상이 아니다', () => {
+    let s = regExt(emptyState(), 'e1', at(2026, 11, 10), spider).state;
+    s = regExt(s, 'e2', at(2026, 11, 11)).state;
+    expect(canStudy(s, spider.id)).toBe(false);
+  });
+});

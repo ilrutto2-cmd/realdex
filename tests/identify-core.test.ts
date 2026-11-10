@@ -2,7 +2,10 @@ import { describe, expect, it } from 'vitest';
 import catalog from '../supabase/functions/identify/catalog.json';
 import {
   buildSystemPrompt,
+  extSpeciesId,
+  generateSpeciesInfo,
   IdentifyError,
+  isExtEligible,
   identifyImage,
   MAX_BASE64_LENGTH,
   normalize,
@@ -173,5 +176,80 @@ describe('오류 처리', () => {
       (async () => new Response(JSON.stringify({ error: { type: 'invalid_request_error', message } }), { status })) as unknown as typeof fetch;
     await expect(call({ fetchImpl: err(400, 'Your credit balance is too low to access the Anthropic API.') })).rejects.toThrow('크레딧');
     await expect(call({ fetchImpl: err(401, 'invalid x-api-key') })).rejects.toThrow('키가 올바르지');
+  });
+});
+
+describe('확장 도감', () => {
+  const cand = (over: Partial<import('../supabase/functions/identify/core').Candidate> = {}) => ({
+    catalogId: null,
+    nameKo: '큰허리노린재',
+    scientificName: 'Molipteryx fuliginosa',
+    rank: 'species' as const,
+    assessment: 'likely' as const,
+    reasoning: '',
+    ext: null,
+    ...over,
+  });
+
+  it('도감 밖 종 단계의 유력 후보만 확장 도감 대상', () => {
+    expect(isExtEligible(cand())).toBe(true);
+    expect(isExtEligible(cand({ catalogId: 'pica-serica' }))).toBe(false);
+    expect(isExtEligible(cand({ assessment: 'possible' }))).toBe(false);
+    expect(isExtEligible(cand({ rank: 'genus', scientificName: 'Molipteryx' }))).toBe(false);
+    expect(isExtEligible(cand({ scientificName: 'molipteryx fuliginosa' }))).toBe(false);
+    expect(isExtEligible(cand({ scientificName: 'Molipteryx sp.' }))).toBe(false);
+  });
+
+  it('학명으로 같은 id를 만든다', () => {
+    expect(extSpeciesId('Molipteryx fuliginosa')).toBe('x-molipteryx-fuliginosa');
+    expect(extSpeciesId(' Araneus  ventricosus ')).toBe('x-araneus-ventricosus');
+  });
+
+  it('학명이 도감 종과 같으면 id가 없어도 도감 종으로 본다', () => {
+    const r = normalize(
+      { ...base, candidates: [{ catalog_id: null, name_ko: '참새', scientific_name: 'passer montanus', rank: 'species', assessment: 'likely', reasoning: 'x' }] },
+      catalog,
+      'm',
+    );
+    expect(r.candidates[0]).toMatchObject({ catalogId: 'passer-montanus', nameKo: '참새', ext: null });
+  });
+
+  const infoReply = (input: unknown) =>
+    (async (_u: string, init: RequestInit) => {
+      const body = JSON.parse(init.body as string);
+      expect(body.output_config.format.type).toBe('json_schema');
+      expect(JSON.stringify(body.messages)).toContain('Molipteryx fuliginosa');
+      return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(input) }] }));
+    }) as unknown as typeof fetch;
+  const info = {
+    is_animal_species: true,
+    name_ko: '큰허리노린재',
+    group: 'insect',
+    taxon: '노린재목 허리노린재과',
+    feature: '몸이 검은 갈색이고 배 가장자리가 넓게 튀어나와 있다.',
+    habitat: '숲 가장자리, 산딸기·찔레 주변',
+    season: '봄~가을',
+    role: '식물 즙을 먹고 새와 거미의 먹이가 된다.',
+    similar: '시골가시허리노린재는 더 작고 가시가 짧다.',
+    is_protected: false,
+  };
+  const gen = (input: unknown) =>
+    generateSpeciesInfo({ scientificName: 'Molipteryx fuliginosa', nameKoHint: '큰허리노린재', apiKey: 'k', model: 'm', fetchImpl: infoReply(input) });
+
+  it('종 설명을 만들어 확장 종으로 돌려준다', async () => {
+    expect(await gen(info)).toMatchObject({
+      id: 'x-molipteryx-fuliginosa',
+      nameKo: '큰허리노린재',
+      scientificName: 'Molipteryx fuliginosa',
+      group: 'insect',
+      isProtected: false,
+    });
+  });
+  it('국명이 없으면 학명을, 모르는 분류군은 기타로', async () => {
+    expect(await gen({ ...info, name_ko: null, group: 'alien' })).toMatchObject({ nameKo: 'Molipteryx fuliginosa', group: 'other' });
+  });
+  it('실제 종이 아니거나 설명이 비면 만들지 않는다', async () => {
+    expect(await gen({ ...info, is_animal_species: false })).toBeNull();
+    expect(await gen({ ...info, habitat: '  ' })).toBeNull();
   });
 });

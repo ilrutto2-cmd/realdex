@@ -4,16 +4,40 @@
 // → 앱과 서버 함수의 연결·검증·오류 처리는 확인하지만, 실제 AI의 판별 능력은 확인하지 못한다.
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import catalog from '../../supabase/functions/identify/catalog.json';
-import { IdentifyError, identifyImage } from '../../supabase/functions/identify/core';
+import { generateSpeciesInfo, IdentifyError, identifyImage, isExtEligible } from '../../supabase/functions/identify/core';
 
-export type Mode = 'ladybug' | 'magpie' | 'none' | 'fail500' | 'offline' | 'ratelimit';
+export type Mode = 'ladybug' | 'magpie' | 'spider' | 'none' | 'fail500' | 'offline' | 'ratelimit';
 
 const USER_ID = '11111111-2222-4333-8444-555555555555';
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const fakeJwt = () =>
   `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER_ID, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
 
-const CANNED: Record<'ladybug' | 'magpie' | 'none', unknown> = {
+const SPIDER_INFO = {
+  is_animal_species: true,
+  name_ko: '산왕거미',
+  group: 'other',
+  taxon: '거미목 왕거미과',
+  feature: '(테스트용 응답) 배가 크고 둥글며 갈색 무늬가 있다.',
+  habitat: '(테스트용 응답) 숲 가장자리, 처마 밑',
+  season: '여름~가을',
+  role: '(테스트용 응답) 날벌레를 잡아먹는다.',
+  similar: '(테스트용 응답) 왕거미와 비슷하다.',
+  is_protected: false,
+};
+
+const CANNED: Record<'ladybug' | 'magpie' | 'spider' | 'none', unknown> = {
+  spider: {
+    organism_visible: true,
+    image_quality: 'ok',
+    candidates: [
+      { catalog_id: null, name_ko: '산왕거미', scientific_name: 'Araneus ventricosus', rank: 'species', assessment: 'likely', reasoning: '(테스트용 응답) 둥근 그물 가운데 큰 배를 가진 거미가 보입니다.' },
+      { catalog_id: null, name_ko: '왕거미속', scientific_name: 'Araneus', rank: 'genus', assessment: 'possible', reasoning: '(테스트용 응답) 속 단계까지만 확실합니다.' },
+    ],
+    retake_advice: null,
+    caution: null,
+    possibly_protected: false,
+  },
   ladybug: {
     organism_visible: true,
     image_quality: 'ok',
@@ -64,16 +88,20 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
   let mode: Mode = 'ladybug';
   const log: MockBackend['log'] = [];
   const anthropicRequests: MockBackend['anthropicRequests'] = [];
+  const extStore = new Map<string, import('../../supabase/functions/identify/core').ExtSpecies>();
 
   const fakeAnthropic = (async (_url: string, init: RequestInit) => {
     const body = JSON.parse(init.body as string);
     anthropicRequests.push({
       hasKeyHeader: (init.headers as Record<string, string>)['x-api-key'] === 'server-side-secret',
-      imageBytes: body.messages[0].content[0].source.data.length,
+      imageBytes: body.messages[0].content[0].source?.data?.length ?? 0,
       model: body.model,
     });
     if (mode === 'fail500') return new Response('{}', { status: 500 });
-    const input = CANNED[mode === 'magpie' || mode === 'none' ? mode : 'ladybug'];
+    if (String(body.system).includes('편집자')) {
+      return new Response(JSON.stringify({ content: [{ type: 'text', text: JSON.stringify(SPIDER_INFO) }] }));
+    }
+    const input = CANNED[mode === 'magpie' || mode === 'none' || mode === 'spider' ? mode : 'ladybug'];
     return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(input) }] }));
   }) as unknown as typeof fetch;
 
@@ -139,6 +167,14 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
           model: 'mock-model',
           fetchImpl: fakeAnthropic,
         });
+        // 실제 서버 함수(index.ts)와 같은 순서로 확장 종을 붙인다. DB 대신 메모리에 저장.
+        for (const c of result.candidates) {
+          if (!isExtEligible(c)) continue;
+          c.ext =
+            extStore.get(c.scientificName) ??
+            (await generateSpeciesInfo({ scientificName: c.scientificName, nameKoHint: c.nameKo, apiKey: 'server-side-secret', model: 'mock-model', fetchImpl: fakeAnthropic }));
+          if (c.ext) extStore.set(c.scientificName, c.ext);
+        }
         send(200, result);
       } catch (e) {
         if (e instanceof IdentifyError) send(e.code === 'bad_request' ? 400 : 502, { error: e.code, message: e.message });

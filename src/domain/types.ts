@@ -1,10 +1,14 @@
-export type SpeciesGroup = 'insect' | 'bird' | 'mammal';
+export type SpeciesGroup = 'insect' | 'bird' | 'mammal' | 'other';
+
+/** core: 기본 도감(미리 정한 종). ext: 확장 도감(AI가 확실히 판별한 그 밖의 종). */
+export type SpeciesKind = 'core' | 'ext';
 
 /** 게임상 발견 난이도. 실제 개체 수나 법적 보호 등급과 무관한 게임 지표. */
 export type Tier = 'common' | 'interest' | 'special' | 'season' | 'explore';
 
 export interface Species {
   id: string;
+  kind: SpeciesKind;
   no: number;
   nameKo: string;
   scientificName: string;
@@ -18,6 +22,8 @@ export interface Species {
   season: string;
   role: string;
   similar: string;
+  /** 법정 보호종 여부(확장 종은 AI 판단). 보호종은 위치를 기록하지 않는다. */
+  isProtected?: boolean;
 }
 
 export type ObservationSource = 'ai' | 'manual_demo';
@@ -75,6 +81,8 @@ export interface AppState {
   missionClaims: Record<string, string>;
   /** achievementId -> ISO */
   achievements: Record<string, string>;
+  /** 확장 도감 종 정보(서버에서 받은 것). id -> 종 */
+  extSpecies: Record<string, Species>;
   /** 클라우드에 반영된 관찰 기록 id */
   syncedObservationIds: Record<string, true>;
   settings: Settings;
@@ -87,6 +95,7 @@ export const emptyState = (): AppState => ({
   studies: {},
   missionClaims: {},
   achievements: {},
+  extSpecies: {},
   syncedObservationIds: {},
   settings: { recordRegion: false },
 });
@@ -123,6 +132,8 @@ export interface RegisterInput {
   lat: number | null;
   lng: number | null;
   source: ObservationSource;
+  /** 확장 종을 처음 등록할 때 함께 넘기는 종 정보 */
+  ext?: Species;
 }
 
 export interface RegisterResult {

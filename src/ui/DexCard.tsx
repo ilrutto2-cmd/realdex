@@ -1,7 +1,7 @@
 import React from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { DexEntry, Species } from '../domain/types';
-import { Icon, StageStars } from './components';
+import { Icon, speciesNumber, StageStars } from './components';
 import { C, R, STAGE_STYLE } from './theme';
 
 /** 도감 격자에 쓰는 작은 카드. 미발견 종은 이름을 가리고 실루엣만 보여 준다. */
@@ -36,7 +36,7 @@ export const DexCard = ({
         ) : (
           <Icon name={species.icon} size={width * 0.46} color="#31443A" />
         )}
-        <Text style={[styles.no, !entry && { color: C.faint }]}>No.{String(species.no).padStart(3, '0')}</Text>
+        <Text style={[styles.no, !entry && { color: C.faint }]}>{speciesNumber(species)}</Text>
       </View>
       <View style={styles.meta}>
         <Text numberOfLines={1} style={[styles.name, !entry && { color: C.faint }]}>

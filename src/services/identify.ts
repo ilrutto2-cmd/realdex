@@ -1,3 +1,5 @@
+import { GROUP_ICON } from '../domain/species';
+import type { Species, SpeciesGroup } from '../domain/types';
 import { cloudEnabled, ensureSession, supabaseAnonKey, supabaseUrl } from './supabase';
 
 export type Rank = 'species' | 'genus' | 'family';
@@ -10,7 +12,48 @@ export interface Candidate {
   rank: Rank;
   assessment: Assessment;
   reasoning: string;
+  /** 도감 밖 종을 확실히 판별했을 때 서버가 붙이는 확장 도감 종 정보 */
+  ext?: ExtSpeciesDto | null;
 }
+
+export interface ExtSpeciesDto {
+  id: string;
+  nameKo: string;
+  scientificName: string;
+  group: SpeciesGroup;
+  taxon: string;
+  feature: string;
+  habitat: string;
+  season: string;
+  role: string;
+  similar: string;
+  isProtected: boolean;
+}
+
+const GROUPS: SpeciesGroup[] = ['insect', 'bird', 'mammal', 'other'];
+
+/** 서버가 준 확장 종 정보를 앱의 종 형식으로 바꾼다. 형식이 이상하면 null. */
+export const extToSpecies = (d: ExtSpeciesDto | null | undefined): Species | null => {
+  if (!d || typeof d.id !== 'string' || !d.id.startsWith('x-') || !d.nameKo || !d.scientificName) return null;
+  const group = GROUPS.includes(d.group) ? d.group : 'other';
+  return {
+    id: d.id,
+    kind: 'ext',
+    no: 0,
+    nameKo: d.nameKo,
+    scientificName: d.scientificName,
+    group,
+    taxon: d.taxon ?? '',
+    tier: 'explore',
+    icon: GROUP_ICON[group],
+    feature: d.feature ?? '',
+    habitat: d.habitat ?? '',
+    season: d.season ?? '',
+    role: d.role ?? '',
+    similar: d.similar ?? '',
+    isProtected: d.isProtected === true,
+  };
+};
 
 export interface IdentifyResult {
   status: 'ok' | 'no_organism' | 'low_quality';

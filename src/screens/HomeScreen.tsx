@@ -2,7 +2,7 @@ import { useNavigation } from '@react-navigation/native';
 import React, { useCallback, useRef, useState } from 'react';
 import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SPECIES_BY_ID } from '../domain/species';
+import { speciesOf } from '../domain/rules';
 import type { MissionStatus } from '../domain/types';
 import type { RootNav } from '../navigation';
 import { cloudEnabled } from '../services/supabase';
@@ -13,7 +13,7 @@ import { C, R } from '../ui/theme';
 export const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<RootNav>();
-  const { level, rate, missions, dex, claimMission } = useStore();
+  const { state, level, rate, missions, dex, claimMission } = useStore();
   const [toast, setToast] = useState<string | null>(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
@@ -145,7 +145,8 @@ export const HomeScreen = () => {
           ) : (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
               {recent.map((e) => {
-                const sp = SPECIES_BY_ID[e.speciesId];
+                const sp = speciesOf(state, e.speciesId);
+                if (!sp) return null;
                 return (
                   <Pressable
                     key={e.speciesId}

@@ -3,7 +3,7 @@ import { Animated, Easing, Image, Modal, ScrollView, StyleSheet, Text, View } fr
 import { ACHIEVEMENTS } from '../domain/rules';
 import { GROUP_LABEL, TIER_LABEL } from '../domain/species';
 import type { MissionStatus, RegisterResult, Species } from '../domain/types';
-import { Button, Icon, StageStars, Tag } from './components';
+import { Button, Icon, speciesNumber, StageStars, Tag } from './components';
 import { C, R, STAGE_STYLE } from './theme';
 
 export interface RevealData {
@@ -96,7 +96,7 @@ export const RevealModal = ({
               <Image source={{ uri: data.photoUri }} style={styles.photo} resizeMode="cover" />
               <View style={styles.cardBody}>
                 <View style={styles.rowBetween}>
-                  <Text style={styles.no}>No.{String(species.no).padStart(3, '0')}</Text>
+                  <Text style={styles.no}>{speciesNumber(species)}</Text>
                   <StageStars stage={result.stageAfter} size={14} />
                 </View>
                 <Text testID="reveal-name" style={styles.name}>
