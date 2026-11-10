@@ -13,6 +13,18 @@ const cors = {
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, 'content-type': 'application/json' } });
 
+/** 서버 전용 키. 새 프로젝트는 SUPABASE_SECRET_KEYS(JSON), 예전 프로젝트는 SUPABASE_SERVICE_ROLE_KEY를 쓴다. */
+const serverKey = (): string => {
+  const legacy = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (legacy) return legacy;
+  try {
+    const keys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') ?? '{}') as Record<string, string>;
+    return keys.default ?? Object.values(keys)[0] ?? '';
+  } catch {
+    return '';
+  }
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
   if (req.method !== 'POST') return json(405, { error: 'method_not_allowed' });
@@ -24,7 +36,7 @@ Deno.serve(async (req) => {
 
   // 로그인(익명 포함)한 사용자만 호출할 수 있다.
   const token = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+  const admin = createClient(Deno.env.get('SUPABASE_URL')!, serverKey(), {
     auth: { persistSession: false },
   });
   const { data: userData, error: userError } = await admin.auth.getUser(token);
