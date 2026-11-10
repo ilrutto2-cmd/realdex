@@ -1,6 +1,6 @@
 // Supabase Edge Function: POST /functions/v1/identify
 // 앱이 보낸 사진을 서버에서 Claude 비전 모델로 판별한다. API 키는 이 함수의 비밀 환경변수에만 둔다.
-import { createClient } from 'npm:@supabase/supabase-js@2';
+import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2';
 import catalog from './catalog.json' with { type: 'json' };
 import {
   extSpeciesId,
@@ -32,7 +32,8 @@ const serverKey = (): string => {
   }
 };
 
-type Admin = ReturnType<typeof createClient>;
+// deno-lint-ignore no-explicit-any
+type Admin = SupabaseClient<any, any, any>;
 
 interface SpeciesRow {
   id: string;
