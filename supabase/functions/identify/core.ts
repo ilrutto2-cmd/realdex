@@ -48,20 +48,19 @@ const MEDIA_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 /** base64 문자열 기준 약 4MB. 앱은 긴 변 1024px JPEG로 줄여서 보낸다. */
 export const MAX_BASE64_LENGTH = 5_600_000;
 
-const TOOL = {
-  name: 'report_identification',
-  description: '사진 속 생물의 판별 결과를 보고한다.',
-  input_schema: {
+/** 모델이 따라야 하는 응답 형식(JSON 스키마). Messages API의 output_config.format으로 강제한다. */
+const RESULT_SCHEMA = {
     type: 'object',
+    additionalProperties: false,
     properties: {
       organism_visible: { type: 'boolean', description: '사진에 곤충·새·포유류 등 동물이 보이는가' },
       image_quality: { type: 'string', enum: QUALITIES },
       candidates: {
         type: 'array',
-        maxItems: 3,
-        description: '가능성이 높은 순서. 근거가 없으면 빈 배열.',
+        description: '가능성이 높은 순서, 최대 3개. 근거가 없으면 빈 배열.',
         items: {
           type: 'object',
+          additionalProperties: false,
           properties: {
             catalog_id: { type: ['string', 'null'], description: '도감 목록의 id. 목록에 없으면 null' },
             name_ko: { type: 'string' },
@@ -78,7 +77,6 @@ const TOOL = {
       possibly_protected: { type: 'boolean', description: '국내 법정 보호종(천연기념물·멸종위기 야생생물)일 가능성이 있는가' },
     },
     required: ['organism_visible', 'image_quality', 'candidates', 'retake_advice', 'caution', 'possibly_protected'],
-  },
 } as const;
 
 export const buildSystemPrompt = (catalog: CatalogItem[]): string => {
@@ -178,14 +176,13 @@ export const identifyImage = async (args: IdentifyArgs): Promise<IdentifyResult>
         model,
         max_tokens: 1200,
         system: buildSystemPrompt(catalog),
-        tools: [TOOL],
-        tool_choice: { type: 'tool', name: TOOL.name },
+        output_config: { format: { type: 'json_schema', schema: RESULT_SCHEMA } },
         messages: [
           {
             role: 'user',
             content: [
               { type: 'image', source: { type: 'base64', media_type: mediaType, data: imageBase64 } },
-              { type: 'text', text: '이 사진 속 생물을 판별해 report_identification 도구로 보고해 줘.' },
+              { type: 'text', text: '이 사진 속 생물을 판별해 정해진 JSON 형식으로만 답해 줘.' },
             ],
           },
         ],
@@ -210,8 +207,16 @@ export const identifyImage = async (args: IdentifyArgs): Promise<IdentifyResult>
     throw new IdentifyError('upstream', `판별 서비스 오류(${res.status}) ${detail}`.trim());
   }
 
-  const body = (await res.json()) as { content?: { type: string; name?: string; input?: unknown }[] };
-  const toolUse = body.content?.find((b) => b.type === 'tool_use' && b.name === TOOL.name);
-  if (!toolUse) throw new IdentifyError('bad_model_output', '판별 결과를 받지 못했습니다.');
-  return normalize(toolUse.input, catalog, model);
+  const body = (await res.json()) as { stop_reason?: string; content?: { type: string; text?: string }[] };
+  const text = body.content?.find((b) => b.type === 'text')?.text;
+  if (!text || body.stop_reason === 'refusal') {
+    throw new IdentifyError('bad_model_output', '판별 결과를 받지 못했습니다.');
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new IdentifyError('bad_model_output', '판별 결과 형식이 올바르지 않습니다.');
+  }
+  return normalize(parsed, catalog, model);
 };

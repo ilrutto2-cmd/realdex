@@ -74,7 +74,7 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
     });
     if (mode === 'fail500') return new Response('{}', { status: 500 });
     const input = CANNED[mode === 'magpie' || mode === 'none' ? mode : 'ladybug'];
-    return new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'report_identification', input }] }));
+    return new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(input) }] }));
   }) as unknown as typeof fetch;
 
   const server = createServer(async (req, res) => {

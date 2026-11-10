@@ -14,7 +14,7 @@ import {
 const IMG = 'A'.repeat(500);
 const toolResponse = (input: unknown, status = 200) =>
   (async () =>
-    new Response(JSON.stringify({ content: [{ type: 'tool_use', name: 'report_identification', input }] }), {
+    new Response(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(input) }] }), {
       status,
     })) as unknown as typeof fetch;
 
@@ -27,12 +27,12 @@ const base = {
 };
 
 describe('요청 구성', () => {
-  it('키는 헤더로만 보내고, 이미지와 도감 목록을 담아 도구 호출을 강제한다', async () => {
+  it('키는 헤더로만 보내고, 이미지와 도감 목록을 담아 JSON 형식을 강제한다', async () => {
     let captured: { url: string; init: RequestInit } | null = null;
     const fetchImpl = (async (url: string, init: RequestInit) => {
       captured = { url, init };
       return new Response(
-        JSON.stringify({ content: [{ type: 'tool_use', name: 'report_identification', input: { ...base, candidates: [] } }] }),
+        JSON.stringify({ content: [{ type: 'text', text: JSON.stringify({ ...base, candidates: [] }) }] }),
       );
     }) as unknown as typeof fetch;
     await identifyImage({ imageBase64: IMG, mediaType: 'image/jpeg', catalog, apiKey: 'sk-test', model: 'm', fetchImpl });
@@ -42,7 +42,11 @@ describe('요청 구성', () => {
     expect(headers['anthropic-version']).toBe('2023-06-01');
     const body = JSON.parse(captured!.init.body as string);
     expect(body.model).toBe('m');
-    expect(body.tool_choice).toEqual({ type: 'tool', name: 'report_identification' });
+    expect(body.tool_choice).toBeUndefined();
+    expect(body.tools).toBeUndefined();
+    expect(body.output_config.format.type).toBe('json_schema');
+    expect(body.output_config.format.schema.additionalProperties).toBe(false);
+    expect(body.output_config.format.schema.properties.candidates.items.additionalProperties).toBe(false);
     expect(body.messages[0].content[0]).toEqual({
       type: 'image',
       source: { type: 'base64', media_type: 'image/jpeg', data: IMG },
@@ -158,8 +162,16 @@ describe('오류 처리', () => {
     expect(await codeOf(call({ fetchImpl: toolResponse({}, 429) }))).toBe('upstream_overloaded');
     expect(await codeOf(call({ fetchImpl: toolResponse({}, 529) }))).toBe('upstream_overloaded');
   });
-  it('도구 호출이 없는 응답은 결과 오류', async () => {
-    const textOnly = (async () => new Response(JSON.stringify({ content: [{ type: 'text', text: '까치입니다' }] }))) as unknown as typeof fetch;
-    expect(await codeOf(call({ fetchImpl: textOnly }))).toBe('bad_model_output');
+  it('JSON이 아니거나 거절·빈 응답이면 결과 오류', async () => {
+    const reply = (body: unknown) => (async () => new Response(JSON.stringify(body))) as unknown as typeof fetch;
+    expect(await codeOf(call({ fetchImpl: reply({ content: [{ type: 'text', text: '까치입니다' }] }) }))).toBe('bad_model_output');
+    expect(await codeOf(call({ fetchImpl: reply({ stop_reason: 'refusal', content: [{ type: 'text', text: '{}' }] }) }))).toBe('bad_model_output');
+    expect(await codeOf(call({ fetchImpl: reply({ content: [] }) }))).toBe('bad_model_output');
+  });
+  it('크레딧 부족·키 오류는 원인을 알려 준다', async () => {
+    const err = (status: number, message: string) =>
+      (async () => new Response(JSON.stringify({ error: { type: 'invalid_request_error', message } }), { status })) as unknown as typeof fetch;
+    await expect(call({ fetchImpl: err(400, 'Your credit balance is too low to access the Anthropic API.') })).rejects.toThrow('크레딧');
+    await expect(call({ fetchImpl: err(401, 'invalid x-api-key') })).rejects.toThrow('키가 올바르지');
   });
 });
