@@ -1,0 +1,54 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Generate Android project
+        run: npx expo prebuild --platform android --no-install
+        env:
+          # 저장소 Secrets에 값을 넣으면 AI 판별이 연결된 APK가, 비워 두면 데모 모드 APK가 만들어진다.
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Build release APK
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ${{ secrets.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
+
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/release/app-release.apk REALDEX.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: REALDEX-apk
+          path: REALDEX.apk
+          retention-days: 30

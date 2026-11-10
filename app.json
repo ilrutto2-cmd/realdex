@@ -1,17 +1,19 @@
 {
   "expo": {
-    "name": "realdex",
+    "name": "REALDEX",
     "slug": "realdex",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "app.realdex.mobile"
     },
     "android": {
+      "package": "app.realdex.mobile",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#1E4D3B",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -20,6 +22,27 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "생물을 촬영해 판별하기 위해 카메라를 사용합니다.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "사진첩의 생물 사진을 판별하기 위해 사진에 접근합니다."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "발견 지역을 시·구 단위로 기록하기 위해 위치를 사용합니다. 설정에서 켠 경우에만 사용합니다."
+        }
+      ]
+    ]
   }
 }

@@ -25,9 +25,14 @@ Run lint and typecheck before declaring any task done.
 
 ## Navigation & Routing
 
-- Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.
-- Import `Link`, `router`, and `useLocalSearchParams` from `expo-router`.
-- Docs: https://docs.expo.dev/router/introduction.md
+- 이 프로젝트는 Expo Router가 아니라 **React Navigation**(하단 탭 + 네이티브 스택)을 쓴다. 화면은 `src/screens/`, 내비게이터 구성은 `App.tsx`, 경로 타입은 `src/navigation.ts`.
+
+## Project layout
+
+- `src/domain/` — 종 데이터와 게임 규칙(순수 함수, React Native 의존 없음). 규칙을 바꾸면 `npm test`.
+- `src/services/` — 카메라 사진 처리, 판별 호출, 저장, 동기화. `src/state/store.tsx`가 화면과 연결한다.
+- `supabase/` — 스키마, 시드, 판별 Edge Function. 종·미션을 고치면 `npm run gen`으로 `seed.sql`과 `catalog.json`을 다시 만든다.
+- 검증: `npm run typecheck`, `npm test`, `npm run test:sql`, `npm run build:e2e && npm run e2e`.
 
 ## Building with EAS
 

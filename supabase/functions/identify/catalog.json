@@ -1,0 +1,308 @@
+[
+ {
+  "id": "coccinella-septempunctata",
+  "nameKo": "칠성무당벌레",
+  "scientificName": "Coccinella septempunctata",
+  "group": "insect"
+ },
+ {
+  "id": "harmonia-axyridis",
+  "nameKo": "무당벌레",
+  "scientificName": "Harmonia axyridis",
+  "group": "insect"
+ },
+ {
+  "id": "aiolocaria-hexaspilota",
+  "nameKo": "남생이무당벌레",
+  "scientificName": "Aiolocaria hexaspilota",
+  "group": "insect"
+ },
+ {
+  "id": "pieris-rapae",
+  "nameKo": "배추흰나비",
+  "scientificName": "Pieris rapae",
+  "group": "insect"
+ },
+ {
+  "id": "papilio-xuthus",
+  "nameKo": "호랑나비",
+  "scientificName": "Papilio xuthus",
+  "group": "insect"
+ },
+ {
+  "id": "papilio-bianor",
+  "nameKo": "제비나비",
+  "scientificName": "Papilio bianor",
+  "group": "insect"
+ },
+ {
+  "id": "colias-erate",
+  "nameKo": "노랑나비",
+  "scientificName": "Colias erate",
+  "group": "insect"
+ },
+ {
+  "id": "polygonia-c-aureum",
+  "nameKo": "네발나비",
+  "scientificName": "Polygonia c-aureum",
+  "group": "insect"
+ },
+ {
+  "id": "vanessa-cardui",
+  "nameKo": "작은멋쟁이나비",
+  "scientificName": "Vanessa cardui",
+  "group": "insect"
+ },
+ {
+  "id": "pseudozizeeria-maha",
+  "nameKo": "남방부전나비",
+  "scientificName": "Pseudozizeeria maha",
+  "group": "insect"
+ },
+ {
+  "id": "crocothemis-servilia",
+  "nameKo": "고추잠자리",
+  "scientificName": "Crocothemis servilia",
+  "group": "insect"
+ },
+ {
+  "id": "orthetrum-albistylum",
+  "nameKo": "밀잠자리",
+  "scientificName": "Orthetrum albistylum",
+  "group": "insect"
+ },
+ {
+  "id": "pantala-flavescens",
+  "nameKo": "된장잠자리",
+  "scientificName": "Pantala flavescens",
+  "group": "insect"
+ },
+ {
+  "id": "anax-parthenope",
+  "nameKo": "왕잠자리",
+  "scientificName": "Anax parthenope",
+  "group": "insect"
+ },
+ {
+  "id": "hyalessa-fuscata",
+  "nameKo": "참매미",
+  "scientificName": "Hyalessa fuscata",
+  "group": "insect"
+ },
+ {
+  "id": "cryptotympana-atrata",
+  "nameKo": "말매미",
+  "scientificName": "Cryptotympana atrata",
+  "group": "insect"
+ },
+ {
+  "id": "tenodera-sinensis",
+  "nameKo": "왕사마귀",
+  "scientificName": "Tenodera sinensis",
+  "group": "insect"
+ },
+ {
+  "id": "apis-mellifera",
+  "nameKo": "양봉꿀벌",
+  "scientificName": "Apis mellifera",
+  "group": "insect"
+ },
+ {
+  "id": "bombus-ignitus",
+  "nameKo": "호박벌",
+  "scientificName": "Bombus ignitus",
+  "group": "insect"
+ },
+ {
+  "id": "trypoxylus-dichotomus",
+  "nameKo": "장수풍뎅이",
+  "scientificName": "Trypoxylus dichotomus",
+  "group": "insect"
+ },
+ {
+  "id": "dorcus-titanus",
+  "nameKo": "넓적사슴벌레",
+  "scientificName": "Dorcus titanus",
+  "group": "insect"
+ },
+ {
+  "id": "lycorma-delicatula",
+  "nameKo": "꽃매미",
+  "scientificName": "Lycorma delicatula",
+  "group": "insect"
+ },
+ {
+  "id": "aquarius-paludum",
+  "nameKo": "소금쟁이",
+  "scientificName": "Aquarius paludum",
+  "group": "insect"
+ },
+ {
+  "id": "acrida-cinerea",
+  "nameKo": "방아깨비",
+  "scientificName": "Acrida cinerea",
+  "group": "insect"
+ },
+ {
+  "id": "atractomorpha-lata",
+  "nameKo": "섬서구메뚜기",
+  "scientificName": "Atractomorpha lata",
+  "group": "insect"
+ },
+ {
+  "id": "camponotus-japonicus",
+  "nameKo": "일본왕개미",
+  "scientificName": "Camponotus japonicus",
+  "group": "insect"
+ },
+ {
+  "id": "cicindela-chinensis",
+  "nameKo": "길앞잡이",
+  "scientificName": "Cicindela chinensis",
+  "group": "insect"
+ },
+ {
+  "id": "teleogryllus-emma",
+  "nameKo": "왕귀뚜라미",
+  "scientificName": "Teleogryllus emma",
+  "group": "insect"
+ },
+ {
+  "id": "pica-serica",
+  "nameKo": "까치",
+  "scientificName": "Pica serica",
+  "group": "bird"
+ },
+ {
+  "id": "passer-montanus",
+  "nameKo": "참새",
+  "scientificName": "Passer montanus",
+  "group": "bird"
+ },
+ {
+  "id": "columba-livia",
+  "nameKo": "집비둘기",
+  "scientificName": "Columba livia",
+  "group": "bird"
+ },
+ {
+  "id": "streptopelia-orientalis",
+  "nameKo": "멧비둘기",
+  "scientificName": "Streptopelia orientalis",
+  "group": "bird"
+ },
+ {
+  "id": "hypsipetes-amaurotis",
+  "nameKo": "직박구리",
+  "scientificName": "Hypsipetes amaurotis",
+  "group": "bird"
+ },
+ {
+  "id": "parus-minor",
+  "nameKo": "박새",
+  "scientificName": "Parus minor",
+  "group": "bird"
+ },
+ {
+  "id": "sittiparus-varius",
+  "nameKo": "곤줄박이",
+  "scientificName": "Sittiparus varius",
+  "group": "bird"
+ },
+ {
+  "id": "sinosuthora-webbiana",
+  "nameKo": "붉은머리오목눈이",
+  "scientificName": "Sinosuthora webbiana",
+  "group": "bird"
+ },
+ {
+  "id": "phoenicurus-auroreus",
+  "nameKo": "딱새",
+  "scientificName": "Phoenicurus auroreus",
+  "group": "bird"
+ },
+ {
+  "id": "corvus-macrorhynchos",
+  "nameKo": "큰부리까마귀",
+  "scientificName": "Corvus macrorhynchos",
+  "group": "bird"
+ },
+ {
+  "id": "anas-platyrhynchos",
+  "nameKo": "청둥오리",
+  "scientificName": "Anas platyrhynchos",
+  "group": "bird"
+ },
+ {
+  "id": "anas-zonorhyncha",
+  "nameKo": "흰뺨검둥오리",
+  "scientificName": "Anas zonorhyncha",
+  "group": "bird"
+ },
+ {
+  "id": "ardea-cinerea",
+  "nameKo": "왜가리",
+  "scientificName": "Ardea cinerea",
+  "group": "bird"
+ },
+ {
+  "id": "egretta-garzetta",
+  "nameKo": "쇠백로",
+  "scientificName": "Egretta garzetta",
+  "group": "bird"
+ },
+ {
+  "id": "ardea-alba",
+  "nameKo": "중대백로",
+  "scientificName": "Ardea alba",
+  "group": "bird"
+ },
+ {
+  "id": "cyanopica-cyanus",
+  "nameKo": "물까치",
+  "scientificName": "Cyanopica cyanus",
+  "group": "bird"
+ },
+ {
+  "id": "garrulus-glandarius",
+  "nameKo": "어치",
+  "scientificName": "Garrulus glandarius",
+  "group": "bird"
+ },
+ {
+  "id": "dendrocopos-major",
+  "nameKo": "오색딱다구리",
+  "scientificName": "Dendrocopos major",
+  "group": "bird"
+ },
+ {
+  "id": "hirundo-rustica",
+  "nameKo": "제비",
+  "scientificName": "Hirundo rustica",
+  "group": "bird"
+ },
+ {
+  "id": "phalacrocorax-carbo",
+  "nameKo": "민물가마우지",
+  "scientificName": "Phalacrocorax carbo",
+  "group": "bird"
+ },
+ {
+  "id": "sciurus-vulgaris",
+  "nameKo": "청설모",
+  "scientificName": "Sciurus vulgaris",
+  "group": "mammal"
+ },
+ {
+  "id": "tamias-sibiricus",
+  "nameKo": "다람쥐",
+  "scientificName": "Tamias sibiricus",
+  "group": "mammal"
+ },
+ {
+  "id": "hydropotes-inermis",
+  "nameKo": "고라니",
+  "scientificName": "Hydropotes inermis",
+  "group": "mammal"
+ }
+]
