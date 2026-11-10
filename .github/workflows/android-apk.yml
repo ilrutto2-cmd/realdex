@@ -8,6 +8,11 @@ on:
 permissions:
   contents: write
 
+# 새로 올리면 진행 중인 이전 빌드는 취소한다.
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
