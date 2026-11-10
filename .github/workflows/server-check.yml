@@ -33,10 +33,10 @@ jobs:
         run: |
           UA="realdex-server-check/1.0 (github.com/ilrutto2-cmd/realdex)"
           THUMB=$(curl -sS -A "$UA" https://en.wikipedia.org/api/rest_v1/page/summary/Coccinella_septempunctata | jq -r '.thumbnail.source')
-          IMG=$(echo "$THUMB" | sed -E 's#/[0-9]+px-#/640px-#')
-          echo "사진: $IMG"
-          curl -sSL -A "$UA" "$IMG" -o photo.jpg || curl -sSL -A "$UA" "$THUMB" -o photo.jpg
+          echo "사진: $THUMB"
+          curl -sSL -A "$UA" "$THUMB" -o photo.jpg
           file photo.jpg; ls -la photo.jpg
+          file photo.jpg | grep -q JPEG || { echo "사진을 받지 못했습니다"; exit 1; }
 
       - name: Call identify
         run: |

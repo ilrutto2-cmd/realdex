@@ -198,7 +198,17 @@ export const identifyImage = async (args: IdentifyArgs): Promise<IdentifyResult>
   if (res.status === 429 || res.status === 529) {
     throw new IdentifyError('upstream_overloaded', '판별 요청이 몰리고 있습니다. 잠시 후 다시 시도해 주세요.');
   }
-  if (!res.ok) throw new IdentifyError('upstream', `판별 서비스 오류(${res.status})`);
+  if (!res.ok) {
+    // Anthropic 오류 본문에서 원인을 꺼내 로그와 메시지에 남긴다(키 값은 포함되지 않는다).
+    const err = (await res.json().catch(() => null)) as { error?: { type?: string; message?: string } } | null;
+    const detail = err?.error?.message ?? '';
+    console.error('anthropic error', res.status, err?.error?.type, detail);
+    if (/credit balance/i.test(detail)) {
+      throw new IdentifyError('upstream', 'AI 판별 서비스의 크레딧이 부족합니다. 관리자에게 알려 주세요.');
+    }
+    if (res.status === 401) throw new IdentifyError('upstream', 'AI 판별 서비스 키가 올바르지 않습니다.');
+    throw new IdentifyError('upstream', `판별 서비스 오류(${res.status}) ${detail}`.trim());
+  }
 
   const body = (await res.json()) as { content?: { type: string; name?: string; input?: unknown }[] };
   const toolUse = body.content?.find((b) => b.type === 'tool_use' && b.name === TOOL.name);
