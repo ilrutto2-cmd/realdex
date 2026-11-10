@@ -1,14 +1,15 @@
 name: Server check
 
 # 배포된 Supabase 판별 함수가 실제로 동작하는지 확인한다.
-# 익명 로그인 → 위키백과의 칠성무당벌레 사진으로 identify 호출 → 결과 출력.
-# 실행할 때마다 Anthropic API 사용료가 사진 1장만큼 든다.
+# 익명 로그인 → 위키백과 사진으로 identify 호출 → 결과 출력.
+#  - 칠성무당벌레: 기본 도감 종
+#  - 산제비나비: 기본 도감 밖 종(확장 도감 생성 확인)
+# 실행할 때마다 Anthropic API 사용료가 사진 수만큼 든다.
 on:
   push:
     branches: [main]
     paths:
       - '.github/workflows/server-check.yml'
-      - 'supabase/functions/**'
   workflow_dispatch:
 
 env:
@@ -29,24 +30,24 @@ jobs:
           echo "TOKEN=$TOKEN" >> "$GITHUB_ENV"
           echo "익명 로그인 성공"
 
-      - name: Download test photo (Wikipedia)
+      - name: Identify test photos
         run: |
           UA="realdex-server-check/1.0 (github.com/ilrutto2-cmd/realdex)"
-          THUMB=$(curl -sS -A "$UA" https://en.wikipedia.org/api/rest_v1/page/summary/Coccinella_septempunctata | jq -r '.thumbnail.source')
-          echo "사진: $THUMB"
-          curl -sSL -A "$UA" "$THUMB" -o photo.jpg
-          file photo.jpg; ls -la photo.jpg
-          file photo.jpg | grep -q JPEG || { echo "사진을 받지 못했습니다"; exit 1; }
-
-      - name: Call identify
-        run: |
-          jq -n --arg b "$(base64 -w0 photo.jpg)" '{image_base64:$b, media_type:"image/jpeg"}' > body.json
-          CODE=$(curl -sS -o out.json -w '%{http_code}' -X POST "$SUPABASE_URL/functions/v1/identify" \
-            -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN" -H "content-type: application/json" --data @body.json)
-          echo "HTTP $CODE"
-          jq . out.json || cat out.json
-          {
-            echo "## 판별 서버 점검: HTTP $CODE"
-            echo '```json'; jq . out.json 2>/dev/null || cat out.json; echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          [ "$CODE" = "200" ]
+          FAIL=0
+          for PAGE in Coccinella_septempunctata Papilio_maackii; do
+            echo "===== $PAGE ====="
+            THUMB=$(curl -sS -A "$UA" "https://en.wikipedia.org/api/rest_v1/page/summary/$PAGE" | jq -r '.thumbnail.source')
+            curl -sSL -A "$UA" "$THUMB" -o photo.jpg
+            if ! file photo.jpg | grep -q JPEG; then echo "사진을 받지 못했습니다: $THUMB"; FAIL=1; continue; fi
+            jq -n --arg b "$(base64 -w0 photo.jpg)" '{image_base64:$b, media_type:"image/jpeg"}' > body.json
+            CODE=$(curl -sS -o out.json -w '%{http_code}' -X POST "$SUPABASE_URL/functions/v1/identify" \
+              -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN" -H "content-type: application/json" --data @body.json)
+            echo "HTTP $CODE"
+            jq . out.json || cat out.json
+            {
+              echo "## $PAGE: HTTP $CODE"
+              echo '```json'; jq . out.json 2>/dev/null || cat out.json; echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            [ "$CODE" = "200" ] || FAIL=1
+          done
+          exit $FAIL
