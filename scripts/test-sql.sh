@@ -12,6 +12,8 @@ run tests/sql/stub_supabase.sql
 run supabase/migrations/0001_init.sql
 run supabase/migrations/0002_extended_dex.sql
 run supabase/migrations/0002_extended_dex.sql   # 두 번 실행해도 안전해야 한다
+run supabase/migrations/0003_feedback.sql
+run supabase/migrations/0003_feedback.sql   # 두 번 실행해도 안전해야 한다
 run supabase/seed.sql
 run supabase/seed.sql   # 두 번 실행해도 안전해야 한다
 $PSQL -At -v ON_ERROR_STOP=1 -d "$DB" -f tests/sql/rls_test.sql

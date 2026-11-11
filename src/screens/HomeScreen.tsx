@@ -167,6 +167,22 @@ export const HomeScreen = () => {
             </ScrollView>
           )}
         </View>
+
+        {cloudEnabled ? (
+          <Pressable
+            testID="home-feedback"
+            onPress={() => navigation.navigate('Feedback', { kind: 'general', context: { source: 'home' } })}
+            accessibilityRole="button"
+            style={styles.feedbackInvite}
+          >
+            <Icon name="message-text-outline" size={22} color={C.forest} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.feedbackTitle}>테스트에 참여해 주셔서 고마워요</Text>
+              <Text style={styles.feedbackSub}>써 보신 느낌을 알려 주세요. 1분이면 됩니다.</Text>
+            </View>
+            <Icon name="chevron-right" size={22} color={C.faint} />
+          </Pressable>
+        ) : null}
       </ScrollView>
       {toast ? (
         <Animated.View
@@ -207,6 +223,18 @@ const styles = StyleSheet.create({
   recent: { width: 104, backgroundColor: C.surface, borderRadius: R.md, borderWidth: 1, borderColor: C.line, overflow: 'hidden', paddingBottom: 8, gap: 4, alignItems: 'center' },
   recentPhoto: { width: 104, height: 92, backgroundColor: C.mint },
   recentName: { fontSize: 12, fontWeight: '800', color: C.ink, paddingHorizontal: 6 },
+  feedbackInvite: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: R.md,
+    borderWidth: 1.5,
+    borderColor: C.moss,
+    borderStyle: 'dashed',
+  },
+  feedbackTitle: { fontSize: 14, fontWeight: '800', color: C.forest },
+  feedbackSub: { fontSize: 12, color: C.sub, marginTop: 2 },
   toast: {
     position: 'absolute',
     alignSelf: 'center',

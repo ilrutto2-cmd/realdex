@@ -4,6 +4,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { canStudy, speciesOf } from '../domain/rules';
 import { GROUP_LABEL, TIER_LABEL } from '../domain/species';
 import type { RootNav, RootStackParamList } from '../navigation';
+import { cloudEnabled } from '../services/supabase';
 import { useStore } from '../state/store';
 import { Banner, Button, confirm, formatDate, H, Icon, Panel, speciesNumber, StageStars, Tag } from '../ui/components';
 import { C, R, STAGE_STYLE } from '../ui/theme';
@@ -151,6 +152,23 @@ export const SpeciesScreen = () => {
               <Text style={styles.obsMeta}>
                 {o.region ?? '지역 기록 안 함'} · {o.source === 'ai' ? 'AI 판별' : '직접 선택'}
               </Text>
+              {o.source === 'ai' && cloudEnabled ? (
+                <Pressable
+                  testID="report-misid"
+                  onPress={() =>
+                    navigation.navigate('Feedback', {
+                      kind: 'misid',
+                      aiSaid: `${sp.nameKo} (${sp.scientificName})`,
+                      photoUri: o.photoUri,
+                      context: { source: 'card', observationId: o.id, speciesId: sp.id, speciesKind: sp.kind },
+                    })
+                  }
+                  accessibilityRole="button"
+                  hitSlop={8}
+                >
+                  <Text style={styles.misidLink}>판별이 틀렸어요</Text>
+                </Pressable>
+              ) : null}
             </View>
             <Pressable
               testID="delete-observation"
@@ -212,5 +230,6 @@ const styles = StyleSheet.create({
   obsPhoto: { width: 56, height: 56, borderRadius: R.sm, backgroundColor: C.mint },
   obsDate: { fontSize: 14, fontWeight: '800', color: C.ink },
   obsMeta: { fontSize: 12, color: C.sub, marginTop: 2 },
+  misidLink: { fontSize: 12, fontWeight: '800', color: C.coral, marginTop: 4, textDecorationLine: 'underline' },
   trash: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
 });

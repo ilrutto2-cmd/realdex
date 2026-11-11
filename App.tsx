@@ -8,11 +8,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { RootStackParamList, TabParamList } from './src/navigation';
 import { CaptureScreen } from './src/screens/CaptureScreen';
 import { DexScreen } from './src/screens/DexScreen';
+import { FeedbackScreen } from './src/screens/FeedbackScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { MyScreen } from './src/screens/MyScreen';
 import { QuizScreen } from './src/screens/QuizScreen';
 import { RecordsScreen } from './src/screens/RecordsScreen';
 import { SpeciesScreen } from './src/screens/SpeciesScreen';
+import { StatsScreen } from './src/screens/StatsScreen';
 import { StoreProvider, useStore } from './src/state/store';
 import { Icon } from './src/ui/components';
 import { C, shadow } from './src/ui/theme';
@@ -81,6 +83,8 @@ const Root = () => {
         <Stack.Screen name="Tabs" component={Tabs} options={{ headerShown: false, title: 'REALDEX' }} />
         <Stack.Screen name="Species" component={SpeciesScreen} options={{ title: '도감 카드' }} />
         <Stack.Screen name="Quiz" component={QuizScreen} options={{ title: '생태 탐구' }} />
+        <Stack.Screen name="Feedback" component={FeedbackScreen} options={({ route }) => ({ title: route.params.kind === 'misid' ? '판별 오류 신고' : '의견 보내기' })} />
+        <Stack.Screen name="Stats" component={StatsScreen} options={{ title: '관리자 통계' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

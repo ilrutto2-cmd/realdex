@@ -1,7 +1,10 @@
+import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ACHIEVEMENTS } from '../domain/rules';
+import type { RootNav } from '../navigation';
+import { APP_VERSION } from '../services/feedback';
 import { cloudEnabled } from '../services/supabase';
 import { useStore } from '../state/store';
 import { Banner, Button, confirm, H, Icon, Panel, ProgressBar } from '../ui/components';
@@ -9,6 +12,7 @@ import { C, R } from '../ui/theme';
 
 export const MyScreen = () => {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation<RootNav>();
   const { state, level, rate, syncStatus, syncError, updateSettings, syncNow, wipeAll } = useStore();
   const [message, setMessage] = useState<string | null>(null);
   const pending = state.observations.filter((o) => !state.syncedObservationIds[o.id]).length;
@@ -70,6 +74,21 @@ export const MyScreen = () => {
         </View>
       </Panel>
 
+      <Panel style={{ gap: 10 }}>
+        <H>의견과 신고</H>
+        <Text style={styles.settingDesc}>
+          불편한 점, 바라는 기능, 판별이 틀린 경우를 알려 주세요. 판별 오류는 도감 카드의 관찰 기록이나 촬영 결과 화면에서도 신고할 수 있어요.
+        </Text>
+        <Button
+          testID="open-feedback"
+          label="의견 보내기"
+          icon="message-text-outline"
+          disabled={!cloudEnabled}
+          onPress={() => navigation.navigate('Feedback', { kind: 'general', context: { source: 'my' } })}
+        />
+        {!cloudEnabled ? <Text style={styles.settingDesc}>데모 모드에서는 보낼 수 없습니다.</Text> : null}
+      </Panel>
+
       <Panel style={{ gap: 12 }}>
         <H>개인정보 및 데이터</H>
         <View style={styles.row}>
@@ -116,6 +135,13 @@ export const MyScreen = () => {
         {message ? <Banner testID="my-message" icon="information-outline" text={message} /> : null}
         <Button testID="wipe" label="모든 데이터 삭제" icon="delete-outline" kind="danger" onPress={() => void wipe()} />
       </Panel>
+
+      <View style={styles.footer}>
+        <Text style={styles.version}>REALDEX v{APP_VERSION}</Text>
+        {cloudEnabled ? (
+          <Button testID="open-stats" label="관리자 통계" icon="chart-bar" kind="ghost" onPress={() => navigation.navigate('Stats')} style={styles.adminBtn} />
+        ) : null}
+      </View>
     </ScrollView>
   );
 };
@@ -148,4 +174,7 @@ const styles = StyleSheet.create({
   setting: { fontSize: 15, fontWeight: '800', color: C.ink },
   settingDesc: { fontSize: 12, lineHeight: 18, color: C.sub, marginTop: 2 },
   divider: { height: 1, backgroundColor: C.line },
+  footer: { alignItems: 'center', gap: 8, marginTop: 4 },
+  version: { fontSize: 11, color: C.faint },
+  adminBtn: { minHeight: 40, borderColor: C.line },
 });

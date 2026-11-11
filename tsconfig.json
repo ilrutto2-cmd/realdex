@@ -4,5 +4,9 @@
     "strict": true,
     "resolveJsonModule": true
   },
-  "exclude": ["node_modules", "supabase/functions/identify/index.ts", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "supabase/functions/*/index.ts"
+  ]
 }

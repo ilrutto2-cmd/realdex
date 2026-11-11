@@ -295,6 +295,77 @@ const cloudScenario = async (browser: Browser, mock: MockBackend) => {
   await page.reload({ waitUntil: 'networkidle0' });
   await click(page, 'tab-dex');
   check('B21 다시 열어도 확장 도감 유지', (await text(page, 'filter-ext')).includes('1종'));
+
+  // 의견 보내기
+  await click(page, 'tab-my');
+  await click(page, 'open-feedback');
+  await visible(page, 'feedback-form');
+  await click(page, 'rating-4');
+  await page.type(sel('feedback-message'), '새를 찍을 때 줌이 있으면 좋겠어요');
+  await shot(page, 'b22-feedback');
+  await click(page, 'feedback-send');
+  await visible(page, 'feedback-done');
+  const g = mock.feedback.at(-1);
+  check('B22 의견이 별점·내용·앱 버전과 함께 저장', g?.kind === 'general' && g.rating === 4 && g.message.includes('줌') && g.app_version === '0.1.0');
+  await click(page, 'feedback-back');
+
+  // 도감 카드에서 판별 오류 신고(사진 포함)
+  await click(page, 'tab-dex');
+  await click(page, 'filter-all');
+  await click(page, 'dex-card-coccinella-septempunctata');
+  await click(page, 'report-misid');
+  await visible(page, 'misid-form');
+  await page.type(sel('misid-answer'), '꼬마남생이무당벌레');
+  await shot(page, 'b23-misid');
+  await click(page, 'feedback-send');
+  await visible(page, 'feedback-done');
+  const m1 = mock.feedback.at(-1);
+  check(
+    'B23 카드에서 오류 신고: AI 판별·실제 이름·사진 경로',
+    m1?.kind === 'misid' && m1.context.actual === '꼬마남생이무당벌레' && String(m1.context.aiSaid).includes('칠성무당벌레') && String(m1.context.photoPath ?? '').includes('/feedback-') && mock.log.some((l) => l.path.includes('/storage/v1/object/observation-photos/') && l.path.includes('feedback-')),
+  );
+  await click(page, 'feedback-back');
+  await back(page);
+
+  // 촬영 결과에서 신고(사진 없이)
+  mock.setMode('none');
+  await shootPhoto(page);
+  await visible(page, 'result-view', 30000);
+  await click(page, 'report-capture');
+  await visible(page, 'misid-form');
+  await click(page, 'misid-photo'); // 사진 보내기 끄기
+  await click(page, 'feedback-send');
+  await visible(page, 'feedback-done');
+  const m2 = mock.feedback.at(-1);
+  check('B24 촬영 결과에서 신고: 판별 상태 포함, 사진 끔', m2?.kind === 'misid' && m2.context.source === 'capture' && m2.context.status === 'no_organism' && !m2.context.photoPath);
+  await click(page, 'feedback-back');
+  await click(page, 'retake');
+
+  // 관리자 통계
+  await click(page, 'tab-my');
+  await click(page, 'open-stats');
+  await visible(page, 'stats-login');
+  await page.type(sel('stats-token'), 'wrong-token-value');
+  await click(page, 'stats-open');
+  check('B25 틀린 토큰은 거절', (await text(page, 'stats-error')).includes('맞지 않습니다'));
+  await page.$eval(sel('stats-token'), (el) => ((el as HTMLInputElement).value = ''));
+  await page.click(sel('stats-token'), { count: 3 });
+  await page.keyboard.press('Backspace');
+  await page.type(sel('stats-token'), 'test-stats-token-123');
+  await click(page, 'stats-open');
+  await visible(page, 'stats-view');
+  check('B25 통계: 오류 신고 2건, 의견 3건, 별점 4.0', (await text(page, 'stat-misid')) === '2' && (await page.$$(sel('feedback-item'))).length === 3 && (await text(page, 'stat-rating')) === '4.0');
+  await shot(page, 'b25-stats');
+  await click(page, 'stats-table-toggle');
+  check('B25 표로 보기', (await page.$$(`${sel('stats-table')} > div`)).length === 15);
+  await back(page);
+  await page.reload({ waitUntil: 'networkidle0' });
+  await click(page, 'tab-my');
+  await click(page, 'open-stats');
+  check('B26 토큰은 기기에 기억', await visible(page, 'stats-view').then(() => true));
+  await click(page, 'stats-forget');
+  await visible(page, 'stats-login');
+  await back(page);
   await click(page, 'tab-my');
 
   await click(page, 'wipe');

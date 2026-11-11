@@ -4,6 +4,7 @@
 // → 앱과 서버 함수의 연결·검증·오류 처리는 확인하지만, 실제 AI의 판별 능력은 확인하지 못한다.
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import catalog from '../../supabase/functions/identify/catalog.json';
+import { computeStats, type FeedbackRow } from '../../supabase/functions/stats/core';
 import { generateSpeciesInfo, IdentifyError, identifyImage, isExtEligible } from '../../supabase/functions/identify/core';
 
 export type Mode = 'ladybug' | 'magpie' | 'spider' | 'none' | 'fail500' | 'offline' | 'ratelimit';
@@ -81,6 +82,7 @@ export interface MockBackend {
   server: Server;
   setMode: (m: Mode) => void;
   log: { method: string; path: string; body?: unknown; auth?: string }[];
+  feedback: FeedbackRow[];
   anthropicRequests: { hasKeyHeader: boolean; imageBytes: number; model: string }[];
 }
 
@@ -88,6 +90,9 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
   let mode: Mode = 'ladybug';
   const log: MockBackend['log'] = [];
   const anthropicRequests: MockBackend['anthropicRequests'] = [];
+  const feedback: FeedbackRow[] = [];
+  const observations: { user_id: string; species_id: string; source: string; created_at: string }[] = [];
+  let identifyCalls = 0;
   const extStore = new Map<string, import('../../supabase/functions/identify/core').ExtSpecies>();
 
   const fakeAnthropic = (async (_url: string, init: RequestInit) => {
@@ -157,6 +162,7 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
         send(401, { error: 'unauthorized' });
         return;
       }
+      identifyCalls += 1;
       const p = (parsed ?? {}) as { image_base64?: string; media_type?: string };
       try {
         const result = await identifyImage({
@@ -182,6 +188,39 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
       }
       return;
     }
+    if (path === '/functions/v1/stats') {
+      if (req.headers['x-stats-token'] !== 'test-stats-token-123') {
+        send(401, { error: 'unauthorized', message: '관리자 토큰이 맞지 않습니다.' });
+        return;
+      }
+      const now = new Date();
+      send(
+        200,
+        computeStats(
+          {
+            profiles: [{ id: USER_ID, created_at: new Date(now.getTime() - 3 * 864e5).toISOString() }],
+            calls: Array.from({ length: identifyCalls }, () => ({ user_id: USER_ID, status: 'ok', created_at: now.toISOString() })),
+            observations,
+            species: [],
+            feedback,
+          },
+          now,
+        ),
+      );
+      return;
+    }
+    if (path === '/rest/v1/feedback' && req.method === 'POST') {
+      const row = parsed as Omit<FeedbackRow, 'user_id' | 'created_at'>;
+      feedback.push({ ...row, user_id: USER_ID, created_at: new Date().toISOString() } as FeedbackRow);
+      send(201, []);
+      return;
+    }
+    if (path === '/rest/v1/observations' && req.method === 'POST') {
+      const row = parsed as { species_id: string; source: string };
+      observations.push({ user_id: USER_ID, species_id: row.species_id, source: row.source, created_at: new Date().toISOString() });
+      send(201, []);
+      return;
+    }
     if (path.startsWith('/storage/v1/object/list/')) {
       send(200, []);
       return;
@@ -199,7 +238,7 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
 
   return new Promise((resolve) => {
     server.listen(port, '127.0.0.1', () =>
-      resolve({ server, setMode: (m) => (mode = m), log, anthropicRequests }),
+      resolve({ server, setMode: (m) => (mode = m), log, anthropicRequests, feedback }),
     );
   });
 };

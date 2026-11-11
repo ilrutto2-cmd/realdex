@@ -130,7 +130,8 @@ Deno.serve(async (req) => {
     .from('identify_calls')
     .select('id', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .gte('created_at', since);
+    .gte('created_at', since)
+    .not('status', 'like', 'error%'); // 실패한 판별은 하루 한도에서 빼 준다
   if (countError) return json(500, { error: 'server', message: '호출 기록을 확인하지 못했습니다.' });
   if ((count ?? 0) >= dailyLimit) {
     return json(429, { error: 'rate_limit', message: '오늘의 판별 횟수를 모두 사용했습니다.' });
@@ -165,6 +166,12 @@ Deno.serve(async (req) => {
     }
     return json(200, result);
   } catch (e) {
+    // 실패도 통계용으로 기록한다(하루 한도에는 들어가지 않는다).
+    const code = e instanceof IdentifyError ? e.code : 'server';
+    await admin.from('identify_calls').insert({ user_id: userId, status: `error:${code}` }).then(
+      () => undefined,
+      () => undefined,
+    );
     if (e instanceof IdentifyError) {
       const status = e.code === 'bad_request' ? 400 : e.code === 'upstream_overloaded' ? 503 : 502;
       return json(status, { error: e.code, message: e.message });

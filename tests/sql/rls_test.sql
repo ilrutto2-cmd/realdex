@@ -86,6 +86,31 @@ begin
     values ('10000000-0000-0000-0000-000000000009', 'x-araneus-ventricosus', now(), current_date, 'hash-ext', 'ai');
   delete from public.observations where id = '10000000-0000-0000-0000-000000000009';
 
+  -- 의견 보내기
+  insert into public.feedback (id, kind, rating, message, context)
+    values ('30000000-0000-0000-0000-000000000001', 'misid', null, '물까치였어요', '{"speciesId":"pica-serica"}');
+  failed := false;
+  begin
+    insert into public.feedback (id, user_id, kind, message)
+      values ('30000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-00000000000b', 'general', '남의 이름');
+  exception when insufficient_privilege then failed := true; end;
+  assert failed, '다른 사용자 이름으로 의견을 쓸 수 없어야 한다';
+  failed := false;
+  begin
+    insert into public.feedback (id, kind, message) values ('30000000-0000-0000-0000-000000000003', 'spam', 'x');
+  exception when check_violation then failed := true; end;
+  assert failed, '의견 종류는 정해진 값만';
+  failed := false;
+  begin
+    insert into public.feedback (id, kind, rating) values ('30000000-0000-0000-0000-000000000004', 'general', 9);
+  exception when check_violation then failed := true; end;
+  assert failed, '별점은 1~5';
+  failed := false;
+  begin
+    update public.feedback set message = '수정' where true;
+  exception when insufficient_privilege then failed := true; end;
+  assert failed, '보낸 의견은 고칠 수 없다';
+
   -- 클라이언트는 종을 추가할 수 없다
   failed := false;
   begin
@@ -111,6 +136,7 @@ begin
   assert (select count(*) from public.dex_progress) = 0, 'B는 A의 도감을 볼 수 없다';
   assert (select count(*) from public.xp_events) = 0, 'B는 A의 경험치를 볼 수 없다';
   assert (select count(*) from public.mission_claims) = 0, 'B는 A의 미션 기록을 볼 수 없다';
+  assert (select count(*) from public.feedback) = 0, 'B는 A의 의견을 볼 수 없다';
   assert (select count(*) from public.profiles) = 1, 'B는 자기 프로필만 본다';
   assert (select count(*) from storage.objects) = 0, 'B는 A의 사진을 볼 수 없다';
   delete from public.observations where true;
@@ -141,5 +167,6 @@ do $$ begin
   assert (select count(*) from public.observations) = 1;
   assert (select count(*) from public.xp_events) = 1;
   assert (select stage from public.dex_progress) = 1;
+  assert (select count(*) from public.feedback) = 1;
 end $$;
 select 'SQL_TESTS_PASSED' as result;

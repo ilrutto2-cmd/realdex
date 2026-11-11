@@ -351,6 +351,39 @@ export const CaptureScreen = () => {
           </View>
         )}
         {notice ? <Banner testID="notice" icon="alert-circle" tone="danger" text={notice} /> : null}
+        <Pressable
+          testID="report-capture"
+          onPress={() =>
+            navigation.navigate('Feedback', {
+              kind: 'misid',
+              aiSaid: none
+                ? result.status === 'no_organism'
+                  ? '생물을 찾지 못함'
+                  : '판별하기 어려움'
+                : result.candidates.map((c) => c.nameKo).join(', '),
+              photoUri: photo.uri,
+              context: {
+                source: 'capture',
+                status: result.status,
+                quality: result.quality,
+                model: result.model,
+                candidates: result.candidates.map((c) => ({
+                  nameKo: c.nameKo,
+                  scientificName: c.scientificName,
+                  rank: c.rank,
+                  assessment: c.assessment,
+                  catalogId: c.catalogId,
+                  extId: c.ext?.id ?? null,
+                })),
+              },
+            })
+          }
+          accessibilityRole="button"
+          style={styles.reportLink}
+        >
+          <Icon name="comment-question-outline" size={18} color={C.coral} />
+          <Text style={styles.reportText}>{none ? '판별 결과가 이상해요' : '후보 중에 맞는 게 없어요'}</Text>
+        </Pressable>
         <View style={styles.actions}>
           {sp && !none ? (
             <Button
@@ -543,6 +576,8 @@ const styles = StyleSheet.create({
   infoText: { fontSize: 14, lineHeight: 20, color: C.ink },
   extNote: { fontSize: 12, lineHeight: 18, color: '#7A5206', backgroundColor: C.amberSoft, padding: 8, borderRadius: R.sm },
   actions: { gap: 10 },
+  reportLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 44 },
+  reportText: { fontSize: 13, fontWeight: '800', color: C.coral, textDecorationLine: 'underline' },
   search: {
     flexDirection: 'row',
     alignItems: 'center',
