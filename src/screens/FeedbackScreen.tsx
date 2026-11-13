@@ -4,10 +4,11 @@ import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleShee
 import type { RootNav, RootStackParamList } from '../navigation';
 import { sendFeedback } from '../services/feedback';
 import { cloudEnabled } from '../services/supabase';
-import { Banner, Button, H, Icon, Panel } from '../ui/components';
+import { Banner, Button, Chip, H, Icon, Panel } from '../ui/components';
 import { C, R } from '../ui/theme';
 
 const RATING_LABEL = ['', '별로예요', '아쉬워요', '보통이에요', '좋아요', '최고예요'];
+const AGE_GROUPS = ['10대', '20대', '30대', '40대', '50대 이상'];
 
 /** 의견 보내기와 판별 오류 신고를 함께 처리하는 화면. */
 export const FeedbackScreen = () => {
@@ -15,6 +16,7 @@ export const FeedbackScreen = () => {
   const navigation = useNavigation<RootNav>();
   const misid = params.kind === 'misid';
   const [rating, setRating] = useState<number | null>(null);
+  const [ageGroup, setAgeGroup] = useState<string | null>(null);
   const [message, setMessage] = useState('');
   const [answer, setAnswer] = useState('');
   const [withPhoto, setWithPhoto] = useState(true);
@@ -31,7 +33,12 @@ export const FeedbackScreen = () => {
       kind: params.kind,
       rating: misid ? null : rating,
       message: misid ? [answer.trim() && `실제: ${answer.trim()}`, message.trim()].filter(Boolean).join('\n') : message,
-      context: { ...(params.context ?? {}), aiSaid: params.aiSaid ?? null, actual: misid ? answer.trim() || null : undefined },
+      context: {
+        ...(params.context ?? {}),
+        aiSaid: params.aiSaid ?? null,
+        actual: misid ? answer.trim() || null : undefined,
+        ageGroup: misid ? undefined : (ageGroup ?? undefined),
+      },
       photoUri: misid && withPhoto ? params.photoUri : null,
     });
     setSending(false);
@@ -129,7 +136,13 @@ export const FeedbackScreen = () => {
               multiline
               maxLength={2000}
             />
-            <Text style={styles.hint}>이름, 전화번호 같은 개인정보는 적지 말아 주세요.</Text>
+            <Text style={styles.label}>연령대 (선택)</Text>
+            <View style={styles.ages}>
+              {AGE_GROUPS.map((a) => (
+                <Chip key={a} testID={`age-${a}`} label={a} active={ageGroup === a} onPress={() => setAgeGroup(ageGroup === a ? null : a)} />
+              ))}
+            </View>
+            <Text style={styles.hint}>이름, 전화번호 같은 개인정보는 적지 말아 주세요. 연령대는 어떤 분들이 즐겨 쓰는지 알아보는 데만 씁니다.</Text>
           </Panel>
         )}
 
@@ -155,6 +168,7 @@ const styles = StyleSheet.create({
   setting: { fontSize: 14, fontWeight: '800', color: C.ink },
   hint: { fontSize: 12, lineHeight: 17, color: C.sub },
   stars: { flexDirection: 'row', justifyContent: 'center', gap: 6 },
+  ages: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   star: { padding: 4 },
   ratingLabel: { textAlign: 'center', fontSize: 14, fontWeight: '800', color: C.sub },
 });

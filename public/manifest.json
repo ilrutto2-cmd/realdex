@@ -1,0 +1,18 @@
+{
+  "short_name": "REALDEX",
+  "name": "REALDEX 리얼덱스 - 우리 동네 생물 도감",
+  "description": "주변의 곤충과 새를 찍으면 AI가 알려 주고, 나만의 생물 도감에 모입니다.",
+  "lang": "ko",
+  "icons": [
+    { "src": "favicon.ico", "sizes": "48x48 32x32 16x16", "type": "image/x-icon" },
+    { "src": "logo192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "logo512.png", "type": "image/png", "sizes": "512x512" },
+    { "src": "logo512-maskable.png", "type": "image/png", "sizes": "512x512", "purpose": "maskable" }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1E4D3B",
+  "background_color": "#F5F0E1"
+}

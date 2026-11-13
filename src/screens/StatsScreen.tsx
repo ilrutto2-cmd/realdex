@@ -199,6 +199,21 @@ export const StatsScreen = () => {
         )}
       </Panel>
 
+      {stats.ageGroups?.length ? (
+        <Panel style={{ gap: 8 }} >
+          <H>연령대별 의견</H>
+          <Text style={styles.meta}>의견 보내기에서 연령대를 고른 응답만 집계합니다.</Text>
+          {stats.ageGroups.map((a) => (
+            <View key={a.ageGroup} style={styles.rowBetween} testID="age-row">
+              <Text style={styles.body}>{a.ageGroup}</Text>
+              <Text style={styles.num}>
+                {a.count}명 · 평균 {a.avgRating ? a.avgRating.toFixed(1) : '–'}점
+              </Text>
+            </View>
+          ))}
+        </Panel>
+      ) : null}
+
       <Panel style={{ gap: 10 }}>
         <H>판별 결과 (최근 90일)</H>
         {Object.entries(stats.identifyStatus)

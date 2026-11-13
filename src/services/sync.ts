@@ -1,6 +1,7 @@
-import { buildDex } from '../domain/rules';
-import type { AppState } from '../domain/types';
-import { readPhotoBytes } from './photos';
+import { buildDex, isCore, type RemoteSnapshot } from '../domain/rules';
+import { GROUP_ICON } from '../domain/species';
+import type { AppState, Observation, Species, SpeciesGroup, XpEvent, XpType } from '../domain/types';
+import { readPhotoBytes, saveDownloadedPhoto } from './photos';
 import { cloudEnabled, ensureSession, getSupabase } from './supabase';
 
 const BUCKET = 'observation-photos';
@@ -98,4 +99,131 @@ export const wipeRemote = async (): Promise<void> => {
     const { error } = await supabase.from(table).delete().eq('user_id', userId);
     if (error) throw new Error(`서버 데이터 삭제 실패: ${error.message}`);
   }
+};
+
+// ---------- 서버 → 기기: 다른 기기에서 로그인했을 때 기록 불러오기 ----------
+
+const PAGE = 1000;
+
+/** 내 행을 모두 읽는다(PostgREST는 한 번에 1000행까지). RLS로 본인 행만 보인다. */
+const readAll = async <T,>(table: string, columns: string): Promise<T[]> => {
+  const supabase = getSupabase();
+  const out: T[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase.from(table).select(columns).range(from, from + PAGE - 1);
+    if (error) throw new Error(`${table} 불러오기 실패: ${error.message}`);
+    out.push(...((data ?? []) as T[]));
+    if (!data || data.length < PAGE) return out;
+  }
+};
+
+interface ObservationRow {
+  id: string;
+  species_id: string;
+  observed_at: string;
+  local_date: string;
+  photo_path: string | null;
+  photo_hash: string;
+  region: string | null;
+  lat: number | null;
+  lng: number | null;
+  source: 'ai' | 'manual_demo';
+}
+
+interface SpeciesRow {
+  id: string;
+  no: number;
+  name_ko: string;
+  scientific_name: string;
+  group_key: SpeciesGroup;
+  taxon: string;
+  feature: string;
+  habitat: string;
+  season: string;
+  role: string;
+  similar_note: string;
+  is_protected: boolean;
+}
+
+/**
+ * 로그인한 계정의 서버 기록을 내려받는다. 사진은 이 기기에 저장해 두고 그 주소를 쓴다.
+ * onProgress(완료, 전체)로 사진 내려받기 진행을 알린다. 이미 이 기기에 있는 사진은 다시 받지 않는다.
+ */
+export const pullState = async (
+  existingPhotos: Record<string, string>,
+  onProgress?: (done: number, total: number) => void,
+): Promise<RemoteSnapshot> => {
+  const supabase = getSupabase();
+  const [obsRows, xpRows, claimRows, dexRows] = await Promise.all([
+    readAll<ObservationRow>('observations', 'id, species_id, observed_at, local_date, photo_path, photo_hash, region, lat, lng, source'),
+    readAll<{ id: string; idem_key: string; type: XpType; amount: number; created_at: string }>('xp_events', 'id, idem_key, type, amount, created_at'),
+    readAll<{ mission_id: string; period_key: string; claimed_at: string }>('mission_claims', 'mission_id, period_key, claimed_at'),
+    readAll<{ species_id: string; study_completed_at: string | null }>('dex_progress', 'species_id, study_completed_at'),
+  ]);
+
+  const extIds = [...new Set(obsRows.map((o) => o.species_id).filter((id) => !isCore(id)))];
+  const extSpecies: Record<string, Species> = {};
+  if (extIds.length > 0) {
+    const { data, error } = await supabase
+      .from('species')
+      .select('id, no, name_ko, scientific_name, group_key, taxon, feature, habitat, season, role, similar_note, is_protected')
+      .in('id', extIds);
+    if (error) throw new Error(`확장 도감 불러오기 실패: ${error.message}`);
+    for (const r of (data ?? []) as SpeciesRow[]) {
+      extSpecies[r.id] = {
+        id: r.id,
+        kind: 'ext',
+        no: r.no,
+        nameKo: r.name_ko,
+        scientificName: r.scientific_name,
+        group: r.group_key,
+        taxon: r.taxon,
+        tier: 'explore',
+        icon: GROUP_ICON[r.group_key] ?? 'paw',
+        feature: r.feature,
+        habitat: r.habitat,
+        season: r.season,
+        role: r.role,
+        similar: r.similar_note,
+        isProtected: r.is_protected,
+      };
+    }
+  }
+
+  const observations: Observation[] = [];
+  let done = 0;
+  onProgress?.(0, obsRows.length);
+  for (const r of obsRows) {
+    let photoUri = existingPhotos[r.id] ?? '';
+    if (!photoUri && r.photo_path) {
+      try {
+        const { data } = await supabase.storage.from(BUCKET).download(r.photo_path);
+        if (data) photoUri = await saveDownloadedPhoto(await data.arrayBuffer(), r.id);
+      } catch {
+        // 사진을 못 받아도 기록은 살린다(카드에는 사진 대신 아이콘이 보인다).
+      }
+    }
+    observations.push({
+      id: r.id,
+      speciesId: r.species_id,
+      observedAt: r.observed_at,
+      localDate: r.local_date,
+      photoUri,
+      photoHash: r.photo_hash,
+      region: r.region,
+      lat: r.lat === null ? null : Number(r.lat),
+      lng: r.lng === null ? null : Number(r.lng),
+      source: r.source,
+    });
+    done += 1;
+    onProgress?.(done, obsRows.length);
+  }
+
+  const xpEvents: XpEvent[] = xpRows.map((r) => ({ id: r.id, key: r.idem_key, type: r.type, amount: r.amount, createdAt: r.created_at }));
+  const missionClaims: Record<string, string> = {};
+  for (const c of claimRows) missionClaims[`${c.mission_id}:${c.period_key}`] = c.claimed_at;
+  const studies: Record<string, string> = {};
+  for (const d of dexRows) if (d.study_completed_at) studies[d.species_id] = d.study_completed_at;
+
+  return { observations, xpEvents, studies, missionClaims, extSpecies };
 };

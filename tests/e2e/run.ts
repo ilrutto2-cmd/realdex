@@ -36,15 +36,32 @@ const click = async (page: Page, id: string) => {
   const el = await visible(page, id);
   await el!.click();
 };
-const text = async (page: Page, id: string) => {
-  const el = await visible(page, id);
+const text = async (page: Page, id: string, timeout?: number) => {
+  const el = await visible(page, id, timeout);
   return (await el!.evaluate((n) => n.textContent)) ?? '';
 };
 const exists = (page: Page, id: string) => page.$(sel(id)).then((e) => !!e);
 const gone = (page: Page, id: string) => page.waitForSelector(sel(id), { hidden: true, timeout: 10000 });
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const state = (page: Page) =>
-  page.evaluate(() => JSON.parse(localStorage.getItem('realdex/state/v1') ?? 'null')) as Promise<{
+  // 웹은 기록을 IndexedDB(realdex/kv)에 저장한다.
+  page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        const req = indexedDB.open('realdex', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('kv');
+        req.onerror = () => resolve(null);
+        req.onsuccess = () => {
+          const db = req.result;
+          const get = db.transaction('kv', 'readonly').objectStore('kv').get('realdex/state/v1');
+          get.onsuccess = () => {
+            db.close();
+            resolve(typeof get.result === 'string' ? JSON.parse(get.result) : null);
+          };
+          get.onerror = () => resolve(null);
+        };
+      }),
+  ) as Promise<{
     observations: { id: string; speciesId: string; source: string; photoUri: string; localDate: string }[];
     xpEvents: { key: string; amount: number }[];
     studies: Record<string, string>;
@@ -54,7 +71,7 @@ const state = (page: Page) =>
 const xpOf = async (page: Page) => ((await state(page))?.xpEvents ?? []).reduce((s, e) => s + e.amount, 0);
 const shot = (page: Page, name: string) => page.screenshot({ path: `${SHOTS}/${name}.png` as `${string}.png` });
 
-const newPage = async (browser: Browser, url: string) => {
+const newPage = async (browser: Pick<Browser, 'newPage'>, url: string) => {
   const page = await browser.newPage();
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2 });
   // 테스트에서 날짜를 넘기기 위한 장치: localStorage의 __dayOffset(일)만큼 시계를 앞당긴다.
@@ -375,6 +392,99 @@ const cloudScenario = async (browser: Browser, mock: MockBackend) => {
   await page.close();
 };
 
+const accountScenario = async (browser: Browser, mock: MockBackend) => {
+  console.log('\n[D] 이메일로 기록 지키기·다른 기기 기록 불러오기 (새 브라우저)');
+  const ctx = await browser.createBrowserContext();
+  const page = await newPage(ctx, 'http://127.0.0.1:8182/');
+  try {
+    mock.setMode('ladybug');
+    await shootPhoto(page);
+    await visible(page, 'result-view', 30000);
+    await click(page, 'register');
+    await click(page, 'reveal-close');
+    await click(page, 'tab-home');
+    check('D1 체험 계정이면 홈에 기록 지키기 안내', (await text(page, 'home-protect')).includes('1건'));
+
+    // 이미 쓰던 계정의 이메일을 넣으면 로그인으로 바뀐다
+    await click(page, 'tab-my');
+    check('D2 마이페이지에 체험 계정 표시', (await text(page, 'account-status')).includes('체험 계정'));
+    await click(page, 'open-account');
+    await page.type(sel('account-email-input'), 'taken@example.com');
+    await click(page, 'send-code');
+    check('D2 이미 가입된 이메일이면 로그인으로 안내', (await text(page, 'account-info')).includes('이미 가입된'));
+    await page.type(sel('account-code-input'), '000000');
+    await click(page, 'verify-code');
+    check('D2 틀린 코드는 거절', (await text(page, 'account-error')).includes('코드가 맞지 않거나'));
+    await page.click(sel('account-code-input'), { count: 3 });
+    await page.keyboard.press('Backspace');
+    await page.type(sel('account-code-input'), '123456');
+    await shot(page, 'd2-code');
+    await click(page, 'verify-code');
+    check('D3 계정 기록 불러오기 완료', (await text(page, 'account-done', 30000)).length > 0);
+    await shot(page, 'd3-restored');
+    await click(page, 'account-back');
+    await pause(1500);
+    check('D3 마이페이지에 계정 연결 표시', (await text(page, 'account-status')).includes('taken@example.com'));
+    check('D3 기록 합치기: 계정의 까치 + 이 기기의 칠성무당벌레', (await text(page, 'stat-species')) === '2종' && (await text(page, 'stat-observations')) === '2건');
+    await click(page, 'tab-dex');
+    const img = await page.$eval(`${sel('dex-card-pica-serica')} img`, (el) => (el as HTMLImageElement).src).catch(() => '');
+    check('D3 계정 사진을 내려받아 카드에 표시', img.startsWith('data:image/jpeg'));
+    await shot(page, 'd3-dex');
+    check(
+      'D4 이 기기에만 있던 기록은 계정 이름으로 다시 올라감',
+      mock.uploads.some((u) => u.user_id === mock.accountId && u.species_id === 'coccinella-septempunctata'),
+    );
+    await click(page, 'tab-home');
+    check('D4 계정 연결 후 홈 안내 사라짐', !(await exists(page, 'home-protect')));
+
+    // 로그아웃: 기기 기록을 지운다
+    await click(page, 'tab-my');
+    await click(page, 'open-account');
+    check('D5 연결된 계정 화면', (await text(page, 'account-email')) === 'taken@example.com');
+    await click(page, 'logout');
+    await visible(page, 'account-status');
+    await pause(1500);
+    check('D5 로그아웃하면 기기 기록이 비고 체험 계정으로', (await text(page, 'stat-observations')) === '0건' && (await text(page, 'account-status')).includes('체험 계정'));
+
+    // 새 이메일 연결(같은 계정 유지)
+    await shootPhoto(page);
+    await visible(page, 'result-view', 30000);
+    await click(page, 'register');
+    await click(page, 'reveal-close');
+    await click(page, 'tab-my');
+    await click(page, 'open-account');
+    await page.type(sel('account-email-input'), 'new@example.com');
+    await click(page, 'send-code');
+    await visible(page, 'account-code-input');
+    await page.type(sel('account-code-input'), '123456');
+    await click(page, 'verify-code');
+    check('D6 새 이메일 연결', (await text(page, 'account-done')).length > 0 && (await page.$eval('[data-testid="account-form"]', (e) => e.textContent ?? '')).includes('이메일을 연결했습니다'));
+    await click(page, 'account-back');
+    await pause(800);
+    check('D6 기록은 그대로, 계정 연결 표시', (await text(page, 'stat-observations')) === '1건' && (await text(page, 'account-status')).includes('new@example.com'));
+    await shot(page, 'd6-my');
+
+    // 의견의 연령대
+    await click(page, 'open-feedback');
+    await click(page, 'rating-5');
+    await click(page, 'age-20대');
+    await click(page, 'feedback-send');
+    await visible(page, 'feedback-done');
+    check('D7 의견에 연령대 저장', mock.feedback.at(-1)?.context.ageGroup === '20대');
+    await click(page, 'feedback-back');
+
+    // 개인정보 처리방침
+    const res = await page.goto('http://127.0.0.1:8182/privacy.html');
+    check('D8 개인정보 처리방침 페이지', res?.status() === 200 && (await page.content()).includes('개인정보 처리방침'));
+  } catch (e) {
+    await page.screenshot({ path: `${SHOTS}/crash-account.png` }).catch(() => undefined);
+    console.log('   [화면 글자]', (await page.evaluate(() => document.body.innerText).catch(() => '')).slice(0, 600).replace(/\n+/g, ' | '));
+    throw e;
+  } finally {
+    await ctx.close();
+  }
+};
+
 const deniedScenario = async () => {
   console.log('\n[C] 카메라 권한 거부');
   // 권한 자동 허용 옵션 없이 실행하면 헤드리스 크롬은 카메라 요청을 거부한다.
@@ -413,6 +523,7 @@ const main = async () => {
   try {
     await demoScenario(browser);
     await cloudScenario(browser, mock);
+    await accountScenario(browser, mock);
     await deniedScenario();
   } catch (e) {
     crashed = e;

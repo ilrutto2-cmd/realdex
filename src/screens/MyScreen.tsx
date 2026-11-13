@@ -1,11 +1,11 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ACHIEVEMENTS } from '../domain/rules';
 import type { RootNav } from '../navigation';
 import { APP_VERSION } from '../services/feedback';
-import { cloudEnabled } from '../services/supabase';
+import { cloudEnabled, privacyUrl } from '../services/supabase';
 import { useStore } from '../state/store';
 import { Banner, Button, confirm, H, Icon, Panel, ProgressBar } from '../ui/components';
 import { C, R } from '../ui/theme';
@@ -13,7 +13,7 @@ import { C, R } from '../ui/theme';
 export const MyScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<RootNav>();
-  const { state, level, rate, syncStatus, syncError, updateSettings, syncNow, wipeAll } = useStore();
+  const { state, level, rate, syncStatus, syncError, updateSettings, syncNow, wipeAll, account } = useStore();
   const [message, setMessage] = useState<string | null>(null);
   const pending = state.observations.filter((o) => !state.syncedObservationIds[o.id]).length;
 
@@ -53,6 +53,26 @@ export const MyScreen = () => {
           <Stat testID="stat-xp" label="누적 경험치" value={`${level.totalXp}`} />
         </View>
       </Panel>
+
+      {cloudEnabled ? (
+        <Pressable
+          testID="open-account"
+          onPress={() => navigation.navigate('Account')}
+          accessibilityRole="button"
+          style={[styles.account, account.isAnonymous && styles.accountWarn]}
+        >
+          <Icon name={account.isAnonymous ? 'shield-alert-outline' : 'shield-check'} size={26} color={account.isAnonymous ? '#7A5206' : C.green} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.setting} testID="account-status">
+              {account.isAnonymous ? '체험 계정 · 기록이 이 기기에만 묶여 있어요' : `계정 연결됨 · ${account.email}`}
+            </Text>
+            <Text style={styles.settingDesc}>
+              {account.isAnonymous ? '이메일을 연결해 기록을 지키거나, 다른 기기의 기록을 불러오세요.' : '다른 휴대폰에서도 같은 이메일로 기록을 불러올 수 있어요.'}
+            </Text>
+          </View>
+          <Icon name="chevron-right" size={22} color={C.faint} />
+        </Pressable>
+      ) : null}
 
       <Panel style={{ gap: 12 }}>
         <H>
@@ -137,6 +157,14 @@ export const MyScreen = () => {
       </Panel>
 
       <View style={styles.footer}>
+        <Pressable
+          testID="open-privacy"
+          onPress={() => (Platform.OS === 'web' ? window.open(privacyUrl(), '_blank') : void Linking.openURL(privacyUrl()))}
+          accessibilityRole="link"
+          hitSlop={8}
+        >
+          <Text style={styles.link}>개인정보 처리방침</Text>
+        </Pressable>
         <Text style={styles.version}>REALDEX v{APP_VERSION}</Text>
         {cloudEnabled ? (
           <Button testID="open-stats" label="관리자 통계" icon="chart-bar" kind="ghost" onPress={() => navigation.navigate('Stats')} style={styles.adminBtn} />
@@ -175,6 +203,18 @@ const styles = StyleSheet.create({
   settingDesc: { fontSize: 12, lineHeight: 18, color: C.sub, marginTop: 2 },
   divider: { height: 1, backgroundColor: C.line },
   footer: { alignItems: 'center', gap: 8, marginTop: 4 },
+  link: { fontSize: 12, fontWeight: '700', color: C.sub, textDecorationLine: 'underline' },
+  account: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: R.lg,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.surface,
+  },
+  accountWarn: { backgroundColor: C.amberSoft, borderColor: C.amber },
   version: { fontSize: 11, color: C.faint },
   adminBtn: { minHeight: 40, borderColor: C.line },
 });

@@ -31,10 +31,10 @@ export const DexCard = ({
       ]}
     >
       <View style={[styles.photo, { height: width * 0.92 }, !entry && styles.unknown]}>
-        {entry ? (
+        {entry?.coverPhotoUri ? (
           <Image source={{ uri: entry.coverPhotoUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         ) : (
-          <Icon name={species.icon} size={width * 0.46} color="#31443A" />
+          <Icon name={species.icon} size={width * 0.46} color={entry ? C.green : '#31443A'} />
         )}
         <Text style={[styles.no, !entry && { color: C.faint }]}>{speciesNumber(species)}</Text>
       </View>

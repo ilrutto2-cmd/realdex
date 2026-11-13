@@ -419,3 +419,57 @@ export const nextMission = (state: AppState, now: Date): MissionStatus | null =>
   if (open.length === 0) return null;
   return open.sort((a, b) => a.target - a.progress - (b.target - b.progress))[0];
 };
+
+// ---------- 다른 기기 기록 합치기 ----------
+
+/** 서버에서 내려받은 계정 기록(사진은 이미 이 기기에 저장된 주소로 바뀐 상태). */
+export interface RemoteSnapshot {
+  observations: Observation[];
+  xpEvents: XpEvent[];
+  studies: Record<string, string>;
+  missionClaims: Record<string, string>;
+  extSpecies: Record<string, Species>;
+}
+
+const earliest = (a: Record<string, string>, b: Record<string, string>): Record<string, string> => {
+  const out = { ...a };
+  for (const [k, v] of Object.entries(b)) if (!out[k] || v < out[k]) out[k] = v;
+  return out;
+};
+
+/**
+ * 이 기기의 기록(local)과 로그인한 계정의 서버 기록(remote)을 합친다.
+ * - 관찰 기록은 id로 합치고, 같은 사진(해시)은 한 번만 둔다.
+ * - 이 기기에만 있는 관찰 기록은 새 계정으로 다시 올라가도록 새 id를 받고 '미백업' 상태가 된다
+ *   (예전 익명 계정에 올린 행과 id가 겹치지 않게).
+ * - 경험치는 보상 키로 합쳐 같은 보상을 두 번 받지 않는다.
+ * - 업적은 합친 기록 기준으로 다시 계산한다.
+ */
+export const mergeStates = (local: AppState, remote: RemoteSnapshot, now: Date, makeId: () => string): AppState => {
+  const remoteIds = new Set(remote.observations.map((o) => o.id));
+  const remoteHashes = new Set(remote.observations.map((o) => o.photoHash));
+  const localOnly = local.observations
+    .filter((o) => !remoteIds.has(o.id) && !remoteHashes.has(o.photoHash))
+    .map((o) => ({ ...o, id: makeId() }));
+  const observations = [...remote.observations, ...localOnly].sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+
+  const byKey = new Map<string, XpEvent>();
+  for (const e of [...remote.xpEvents, ...local.xpEvents]) {
+    const cur = byKey.get(e.key);
+    if (!cur || e.createdAt < cur.createdAt) byKey.set(e.key, e);
+  }
+
+  const syncedObservationIds: Record<string, true> = {};
+  for (const id of remoteIds) syncedObservationIds[id] = true;
+
+  const merged: AppState = {
+    ...local,
+    observations,
+    xpEvents: [...byKey.values()].sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+    studies: earliest(local.studies, remote.studies),
+    missionClaims: earliest(local.missionClaims, remote.missionClaims),
+    extSpecies: { ...remote.extSpecies, ...local.extSpecies },
+    syncedObservationIds,
+  };
+  return withAchievements(merged, now).state;
+};

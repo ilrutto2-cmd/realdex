@@ -29,8 +29,8 @@ const photoDir = () => new Directory(Paths.document, 'photos');
 /** 사진을 앱 전용 저장소에 영구 보관하고 그 주소를 돌려준다. */
 export const persistPhoto = async (photo: PreparedPhoto, id: string): Promise<string> => {
   if (Platform.OS === 'web') {
-    // 웹(테스트용)에는 앱 전용 파일 저장소가 없어 작은 사진을 데이터 주소로 보관한다.
-    const small = await manipulateAsync(photo.uri, [{ resize: { width: 360 } }], {
+    // 웹에는 앱 전용 파일 저장소가 없어 줄인 사진을 데이터 주소로 IndexedDB에 보관한다.
+    const small = await manipulateAsync(photo.uri, [{ resize: { width: 480 } }], {
       compress: 0.6,
       format: SaveFormat.JPEG,
       base64: true,
@@ -67,4 +67,24 @@ export const deleteAllPhotos = (): void => {
 export const readPhotoBytes = async (uri: string): Promise<ArrayBuffer> => {
   if (Platform.OS === 'web' || !uri.startsWith('file:')) return (await fetch(uri)).arrayBuffer();
   return new File(uri).arrayBuffer();
+};
+
+/** 서버에서 내려받은 사진(JPEG 바이트)을 이 기기에 보관하고 주소를 돌려준다. */
+export const saveDownloadedPhoto = async (bytes: ArrayBuffer, id: string): Promise<string> => {
+  if (Platform.OS === 'web') {
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/jpeg' }));
+    try {
+      const small = await manipulateAsync(url, [{ resize: { width: 480 } }], { compress: 0.6, format: SaveFormat.JPEG, base64: true });
+      return `data:image/jpeg;base64,${small.base64}`;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+  const dir = photoDir();
+  if (!dir.exists) dir.create({ intermediates: true });
+  const dest = new File(dir, `${id}.jpg`);
+  if (dest.exists) dest.delete();
+  dest.create();
+  await dest.write(new Uint8Array(bytes));
+  return dest.uri;
 };

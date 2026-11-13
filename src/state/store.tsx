@@ -7,15 +7,17 @@ import {
   completeStudy as completeStudyRule,
   deleteObservation,
   levelInfo,
+  mergeStates,
   missionStatuses,
   registerObservation,
   totalXp,
 } from '../domain/rules';
 import { emptyState, type AppState, type DexEntry, type LevelInfo, type MissionStatus, type RegisterInput, type RegisterResult, type Settings } from '../domain/types';
+import { getAccount, signOut, type AccountInfo } from '../services/account';
 import { deleteAllPhotos, deletePhoto } from '../services/photos';
 import { clearState, loadState, saveState } from '../services/storage';
 import { cloudEnabled } from '../services/supabase';
-import { pushState, removeRemoteObservation, wipeRemote } from '../services/sync';
+import { pullState, pushState, removeRemoteObservation, wipeRemote } from '../services/sync';
 
 export type SyncStatus = 'off' | 'idle' | 'syncing' | 'error';
 
@@ -35,6 +37,13 @@ interface Store {
   updateSettings: (patch: Partial<Settings>) => Promise<void>;
   syncNow: () => Promise<void>;
   wipeAll: () => Promise<{ remoteOk: boolean }>;
+  /** 서버 계정 상태(익명/이메일 연결) */
+  account: AccountInfo;
+  refreshAccount: () => Promise<AccountInfo>;
+  /** 로그인한 계정의 서버 기록을 내려받아 이 기기 기록과 합친다. */
+  restoreAccount: (onProgress?: (done: number, total: number) => void) => Promise<{ ok: true; total: number } | { ok: false; message: string }>;
+  /** 이 기기에서 로그아웃하고 기기의 기록을 지운다. 백업이 안 된 기록이 있으면 하지 않는다. */
+  logout: () => Promise<{ ok: true } | { ok: false; message: string }>;
 }
 
 const Ctx = createContext<Store | null>(null);
@@ -46,8 +55,19 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(cloudEnabled ? 'idle' : 'off');
   const [syncError, setSyncError] = useState<string | null>(null);
   const [today, setToday] = useState(() => new Date().toDateString());
+  const [account, setAccount] = useState<AccountInfo>({ userId: null, email: null, isAnonymous: true });
   const ref = useRef(state);
   const syncing = useRef(false);
+
+  const refreshAccount = useCallback(async () => {
+    try {
+      const a = await getAccount();
+      setAccount(a);
+      return a;
+    } catch {
+      return { userId: null, email: null, isAnonymous: true };
+    }
+  }, []);
 
   /** 상태를 바꾸면 곧바로 기기에 저장한다. 저장이 끝난 뒤에 화면에 반영된다. */
   const commit = useCallback(async (next: AppState) => {
@@ -69,13 +89,14 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
       }
       setSyncError(null);
       setSyncStatus('idle');
+      void refreshAccount();
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : '동기화에 실패했습니다.');
       setSyncStatus('error');
     } finally {
       syncing.current = false;
     }
-  }, [commit]);
+  }, [commit, refreshAccount]);
 
   useEffect(() => {
     let alive = true;
@@ -178,6 +199,43 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
     return { remoteOk };
   }, []);
 
+  const restoreAccount = useCallback<Store['restoreAccount']>(
+    async (onProgress) => {
+      try {
+        const photos: Record<string, string> = {};
+        for (const o of ref.current.observations) if (o.photoUri) photos[o.id] = o.photoUri;
+        const remote = await pullState(photos, onProgress);
+        await commit(mergeStates(ref.current, remote, new Date(), makeId));
+        await refreshAccount();
+        await syncNow(); // 이 기기에만 있던 기록을 계정으로 올린다
+        return { ok: true, total: remote.observations.length };
+      } catch (e) {
+        return { ok: false, message: e instanceof Error ? e.message : '기록을 불러오지 못했습니다.' };
+      }
+    },
+    [commit, refreshAccount, syncNow],
+  );
+
+  const logout = useCallback<Store['logout']>(async () => {
+    await syncNow();
+    const pending = ref.current.observations.filter((o) => !ref.current.syncedObservationIds[o.id]).length;
+    if (pending > 0) {
+      return { ok: false, message: `아직 백업되지 않은 기록이 ${pending}건 있습니다. 인터넷에 연결한 뒤 다시 시도해 주세요.` };
+    }
+    try {
+      await signOut();
+    } catch {
+      return { ok: false, message: '로그아웃하지 못했습니다. 인터넷 연결을 확인해 주세요.' };
+    }
+    deleteAllPhotos();
+    await clearState();
+    const fresh = emptyState();
+    ref.current = fresh;
+    setState(fresh);
+    await refreshAccount();
+    return { ok: true };
+  }, [syncNow, refreshAccount]);
+
   const value = useMemo<Store>(() => {
     const now = new Date();
     return {
@@ -196,10 +254,14 @@ export const StoreProvider = ({ children }: { children: React.ReactNode }) => {
       updateSettings,
       syncNow,
       wipeAll,
+      account,
+      refreshAccount,
+      restoreAccount,
+      logout,
     };
     // today: 날짜가 바뀌면 미션을 다시 계산한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, state, syncStatus, syncError, today, register, removeObservation, completeStudy, claimMission, updateSettings, syncNow, wipeAll]);
+  }, [ready, state, syncStatus, syncError, today, register, removeObservation, completeStudy, claimMission, updateSettings, syncNow, wipeAll, account, refreshAccount, restoreAccount, logout]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 };

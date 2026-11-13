@@ -45,8 +45,8 @@ const sample = () => ({
     { id: 'x-zosterops-japonicus', name_ko: '동박새', kind: 'ext' },
   ],
   feedback: [
-    fb({ kind: 'general', rating: 5, message: '재밌어요', created_at: kst('2026-11-10') }),
-    fb({ kind: 'general', rating: 3, message: '느려요', created_at: kst('2026-11-11') }),
+    fb({ kind: 'general', rating: 5, message: '재밌어요', context: { ageGroup: '30대' }, created_at: kst('2026-11-10') }),
+    fb({ kind: 'general', rating: 3, message: '느려요', context: { ageGroup: '20대' }, created_at: kst('2026-11-11') }),
     fb({ kind: 'misid', message: '물까치였어요', context: { speciesId: 'pica-serica' }, created_at: kst('2026-11-12', 2) }),
   ],
 });
@@ -96,6 +96,14 @@ describe('사용 통계 집계', () => {
     expect(s.ratingCount).toBe(2);
     expect(s.misidRate).toBeCloseTo(1 / 3);
     expect(s.recentFeedback.map((f) => f.message)).toEqual(['물까치였어요', '느려요', '재밌어요']);
+  });
+
+  it('연령대별 응답 수와 평균 별점', () => {
+    const s = computeStats(sample(), NOW);
+    expect(s.ageGroups).toEqual([
+      { ageGroup: '20대', count: 1, avgRating: 3 },
+      { ageGroup: '30대', count: 1, avgRating: 5 },
+    ]);
   });
 
   it('데이터가 없어도 동작한다', () => {

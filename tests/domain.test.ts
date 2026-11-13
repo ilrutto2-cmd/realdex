@@ -8,6 +8,7 @@ import {
   completeStudy,
   deleteObservation,
   levelInfo,
+  mergeStates,
   missionStatuses,
   nextMission,
   registerObservation,
@@ -292,5 +293,63 @@ describe('확장 도감', () => {
     let s = regExt(emptyState(), 'e1', at(2026, 11, 10), spider).state;
     s = regExt(s, 'e2', at(2026, 11, 11)).state;
     expect(canStudy(s, spider.id)).toBe(false);
+  });
+});
+
+describe('다른 기기 기록 합치기', () => {
+  const day = at(2026, 11, 10);
+  const remoteFrom = (s: AppState) => ({
+    observations: s.observations,
+    xpEvents: s.xpEvents,
+    studies: s.studies,
+    missionClaims: s.missionClaims,
+    extSpecies: s.extSpecies,
+  });
+
+  it('서버 기록과 이 기기 기록을 합치고, 같은 보상은 한 번만', () => {
+    // 계정(다른 기기): 까치
+    const account = reg(emptyState(), MAGPIE, 'r1', day).state;
+    // 이 기기(익명): 까치(다른 사진) + 칠성무당벌레, 이미 익명 계정에 백업됨
+    let local = reg(emptyState(), MAGPIE, 'l1', at(2026, 11, 11)).state;
+    local = reg(local, LADYBUG, 'l2', at(2026, 11, 11)).state;
+    local = { ...local, syncedObservationIds: Object.fromEntries(local.observations.map((o) => [o.id, true as const])) };
+
+    const merged = mergeStates(local, remoteFrom(account), at(2026, 11, 12), makeId);
+    expect(merged.observations).toHaveLength(3);
+    expect(Object.keys(buildDex(merged)).sort()).toEqual([LADYBUG, MAGPIE].sort());
+    // 양쪽 모두 까치 신규 발견 100을 받았지만 합치면 한 번만. + 칠성무당벌레 100
+    expect(merged.xpEvents.filter((e) => e.key === `discover:${MAGPIE}`)).toHaveLength(1);
+    expect(totalXp(merged)).toBe(200);
+    expect(merged.achievements.first).toBeTruthy();
+  });
+
+  it('이 기기에만 있던 기록은 새 id로 바뀌고 다시 올라갈 대상이 된다', () => {
+    const account = reg(emptyState(), MAGPIE, 'r1', day).state;
+    let local = reg(emptyState(), LADYBUG, 'l2', day).state;
+    const oldId = local.observations[0].id;
+    local = { ...local, syncedObservationIds: { [oldId]: true } };
+    const merged = mergeStates(local, remoteFrom(account), day, makeId);
+    const moved = merged.observations.find((o) => o.speciesId === LADYBUG)!;
+    expect(moved.id).not.toBe(oldId);
+    expect(merged.syncedObservationIds[moved.id]).toBeUndefined();
+    expect(merged.syncedObservationIds[account.observations[0].id]).toBe(true);
+  });
+
+  it('같은 사진은 한 번만, 탐구·미션 기록은 이른 쪽', () => {
+    let account = reg(emptyState(), LADYBUG, 'same', day).state;
+    account = { ...account, studies: { [LADYBUG]: '2026-11-12T00:00:00.000Z' }, missionClaims: { 'd_log:2026-11-10': '2026-11-10T05:00:00.000Z' } };
+    let local = reg(emptyState(), LADYBUG, 'same', day).state;
+    local = { ...local, studies: { [LADYBUG]: '2026-11-11T00:00:00.000Z' }, missionClaims: { 'd_log:2026-11-10': '2026-11-10T09:00:00.000Z' } };
+    const merged = mergeStates(local, remoteFrom(account), day, makeId);
+    expect(merged.observations).toHaveLength(1);
+    expect(merged.studies[LADYBUG]).toBe('2026-11-11T00:00:00.000Z');
+    expect(merged.missionClaims['d_log:2026-11-10']).toBe('2026-11-10T05:00:00.000Z');
+  });
+
+  it('빈 기기로 로그인하면 서버 기록이 그대로', () => {
+    const account = reg(emptyState(), MAGPIE, 'r1', day).state;
+    const merged = mergeStates(emptyState(), remoteFrom(account), day, makeId);
+    expect(merged.observations).toEqual(account.observations);
+    expect(totalXp(merged)).toBe(100);
   });
 });

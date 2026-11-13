@@ -11,6 +11,12 @@ export const cloudEnabled = url.length > 0 && anonKey.length > 0;
 export const supabaseUrl = url;
 export const supabaseAnonKey = anonKey;
 
+/** 개인정보 처리방침 주소. 웹에서는 지금 사이트 기준, 앱에서는 EXPO_PUBLIC_SITE_URL 기준. */
+export const privacyUrl = (): string => {
+  if (typeof window !== 'undefined' && window.location?.origin?.startsWith('http')) return `${window.location.origin}/privacy.html`;
+  return `${process.env.EXPO_PUBLIC_SITE_URL ?? ''}/privacy.html`;
+};
+
 let client: SupabaseClient | null = null;
 
 export const getSupabase = (): SupabaseClient => {

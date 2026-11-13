@@ -7,6 +7,7 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { RootStackParamList, TabParamList } from './src/navigation';
 import { CaptureScreen } from './src/screens/CaptureScreen';
+import { AccountScreen } from './src/screens/AccountScreen';
 import { DexScreen } from './src/screens/DexScreen';
 import { FeedbackScreen } from './src/screens/FeedbackScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
@@ -85,6 +86,7 @@ const Root = () => {
         <Stack.Screen name="Quiz" component={QuizScreen} options={{ title: '생태 탐구' }} />
         <Stack.Screen name="Feedback" component={FeedbackScreen} options={({ route }) => ({ title: route.params.kind === 'misid' ? '판별 오류 신고' : '의견 보내기' })} />
         <Stack.Screen name="Stats" component={StatsScreen} options={{ title: '관리자 통계' }} />
+        <Stack.Screen name="Account" component={AccountScreen} options={{ title: '계정과 백업' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

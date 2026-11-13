@@ -13,7 +13,7 @@ import { C, R } from '../ui/theme';
 export const HomeScreen = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<RootNav>();
-  const { state, level, rate, missions, dex, claimMission } = useStore();
+  const { state, level, rate, missions, dex, claimMission, account } = useStore();
   const [toast, setToast] = useState<string | null>(null);
   const toastAnim = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(1)).current;
@@ -116,6 +116,12 @@ export const HomeScreen = () => {
             tone="warn"
             text="데모 모드: AI 판별 서버가 연결되지 않았습니다. 기록은 이 기기에만 저장되고, 생물은 직접 골라 등록합니다."
           />
+        ) : null}
+
+        {cloudEnabled && account.isAnonymous && state.observations.length > 0 ? (
+          <Pressable testID="home-protect" onPress={() => navigation.navigate('Account')} accessibilityRole="button">
+            <Banner icon="shield-alert-outline" tone="warn" text={`모은 도감 ${state.observations.length}건이 아직 이 기기에만 있어요. 눌러서 이메일로 기록을 지키세요.`} />
+          </Pressable>
         ) : null}
 
         <Button testID="go-capture" label="생물 촬영하러 가기" icon="camera-iris" onPress={() => navigation.navigate('Tabs', { screen: 'Capture' })} />

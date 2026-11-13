@@ -11,8 +11,52 @@ export type Mode = 'ladybug' | 'magpie' | 'spider' | 'none' | 'fail500' | 'offli
 
 const USER_ID = '11111111-2222-4333-8444-555555555555';
 const b64 = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
-const fakeJwt = () =>
-  `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: USER_ID, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+const fakeJwt = (sub = USER_ID) =>
+  `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, role: 'authenticated', exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+
+// 이메일 계정 시험용: taken@example.com 은 다른 기기에서 이미 쓰던 계정(까치 1건, 사진 포함)
+const ACCOUNT_ID = '99999999-8888-4777-8666-555555555555';
+const ACCOUNT_EMAIL = 'taken@example.com';
+const OTP = '123456';
+const TINY_JPEG = Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCAAwAEADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwDkqKKKxPNCiop7qG22+a+3d04JqL+07P8A57f+On/CnYajJ7ItUVV/tOz/AOe3/jp/wqWC6hud3lPu29eCKLA4yW6JaKKKQgooooAytb/5Yf8AAv6Vl1qa3/yw/wCBf0rLrWOx20vgQVqaJ/y3/wCA/wBay61NE/5b/wDAf60S2Cr8DNWiiisjiCiiigCKe1hudvmpu29OSKi/syz/AOeP/jx/xq1RTuNSktmVf7Ms/wDnj/48f8algtYbbd5Sbd3XkmpaKLg5Se7CiiikI//Z', 'base64');
+const ACCOUNT_ROWS: Record<string, unknown[]> = {
+  observations: [
+    {
+      id: 'aaaaaaaa-0000-4000-8000-000000000001',
+      species_id: 'pica-serica',
+      observed_at: '2026-11-01T03:00:00.000Z',
+      local_date: '2026-11-01',
+      photo_path: `${ACCOUNT_ID}/aaaaaaaa-0000-4000-8000-000000000001.jpg`,
+      photo_hash: 'account-photo-hash',
+      region: null,
+      lat: null,
+      lng: null,
+      source: 'ai',
+    },
+  ],
+  xp_events: [{ id: 'bbbbbbbb-0000-4000-8000-000000000001', idem_key: 'discover:pica-serica', type: 'discover', amount: 100, created_at: '2026-11-01T03:00:00.000Z' }],
+  mission_claims: [{ mission_id: 'd_log', period_key: '2026-11-01', claimed_at: '2026-11-01T03:05:00.000Z' }],
+  dex_progress: [{ species_id: 'pica-serica', study_completed_at: null }],
+};
+const userJson = (id: string, email: string) => {
+  const now = new Date().toISOString();
+  return { id, aud: 'authenticated', role: 'authenticated', email, is_anonymous: !email, app_metadata: {}, user_metadata: {}, created_at: now, updated_at: now };
+};
+const sessionJson = (id: string, email: string) => ({
+  access_token: fakeJwt(id),
+  token_type: 'bearer',
+  expires_in: 3600,
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  refresh_token: `refresh-${id}`,
+  user: userJson(id, email),
+});
+const subOf = (auth: string | undefined): string | null => {
+  try {
+    return JSON.parse(Buffer.from((auth ?? '').replace(/^Bearer\s+/i, '').split('.')[1] ?? '', 'base64url').toString()).sub ?? null;
+  } catch {
+    return null;
+  }
+};
 
 const SPIDER_INFO = {
   is_animal_species: true,
@@ -83,6 +127,9 @@ export interface MockBackend {
   setMode: (m: Mode) => void;
   log: { method: string; path: string; body?: unknown; auth?: string }[];
   feedback: FeedbackRow[];
+  /** 앱이 올린 관찰 기록(누구 이름으로 올렸는지 포함) */
+  uploads: { user_id: string; species_id: string; source: string; created_at: string }[];
+  accountId: string;
   anthropicRequests: { hasKeyHeader: boolean; imageBytes: number; model: string }[];
 }
 
@@ -91,6 +138,8 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
   const log: MockBackend['log'] = [];
   const anthropicRequests: MockBackend['anthropicRequests'] = [];
   const feedback: FeedbackRow[] = [];
+  let pendingEmail: string | null = null;
+  let linkedEmail: string | null = null;
   const observations: { user_id: string; species_id: string; source: string; created_at: string }[] = [];
   let identifyCalls = 0;
   const extStore = new Map<string, import('../../supabase/functions/identify/core').ExtSpecies>();
@@ -136,6 +185,69 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
     }
     const entry = { method: req.method ?? '', path, body: path.includes('/identify') ? '(image)' : (parsed ?? `(${raw.length} bytes)`), auth: req.headers.authorization };
     log.push(entry);
+
+    // ---- 이메일 연결·로그인 ----
+    const authBody = (parsed ?? {}) as { email?: string; token?: string; type?: string };
+    if (path === '/auth/v1/user' && req.method === 'PUT') {
+      if (authBody.email === ACCOUNT_EMAIL) {
+        send(422, { code: 'email_exists', msg: 'A user with this email address has already been registered' });
+        return;
+      }
+      pendingEmail = authBody.email ?? null;
+      send(200, { ...userJson(USER_ID, ''), new_email: pendingEmail });
+      return;
+    }
+    if (path === '/auth/v1/otp' && req.method === 'POST') {
+      if (authBody.email !== ACCOUNT_EMAIL && authBody.email !== linkedEmail) {
+        send(422, { code: 'otp_disabled', msg: 'Signups not allowed for otp' });
+        return;
+      }
+      send(200, {});
+      return;
+    }
+    if (path === '/auth/v1/verify' && req.method === 'POST') {
+      if (authBody.token !== OTP) {
+        send(403, { code: 'otp_expired', msg: 'Token has expired or is invalid' });
+        return;
+      }
+      if (authBody.type === 'email_change') {
+        linkedEmail = pendingEmail;
+        send(200, sessionJson(USER_ID, linkedEmail ?? ''));
+        return;
+      }
+      if (authBody.email === ACCOUNT_EMAIL) {
+        send(200, sessionJson(ACCOUNT_ID, ACCOUNT_EMAIL));
+        return;
+      }
+      send(200, sessionJson(USER_ID, linkedEmail ?? ''));
+      return;
+    }
+    if (path === '/auth/v1/logout') {
+      res.writeHead(204, cors);
+      res.end();
+      return;
+    }
+    if (path === '/auth/v1/user' && req.method === 'GET') {
+      const sub = subOf(req.headers.authorization);
+      send(200, sub === ACCOUNT_ID ? userJson(ACCOUNT_ID, ACCOUNT_EMAIL) : userJson(USER_ID, linkedEmail ?? ''));
+      return;
+    }
+    // 계정 사진 내려받기
+    if (req.method === 'GET' && path.startsWith('/storage/v1/object/') && path.endsWith('.jpg')) {
+      res.writeHead(200, { ...cors, 'content-type': 'image/jpeg' });
+      res.end(TINY_JPEG);
+      return;
+    }
+    // 계정 기록 읽기(로그인한 계정 행만)
+    if (req.method === 'GET' && path.startsWith('/rest/v1/')) {
+      const table = path.slice('/rest/v1/'.length);
+      if (table === 'species') {
+        send(200, []);
+        return;
+      }
+      send(200, subOf(req.headers.authorization) === ACCOUNT_ID ? (ACCOUNT_ROWS[table] ?? []) : []);
+      return;
+    }
 
     if (path === '/auth/v1/signup') {
       const now = new Date().toISOString();
@@ -217,7 +329,7 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
     }
     if (path === '/rest/v1/observations' && req.method === 'POST') {
       const row = parsed as { species_id: string; source: string };
-      observations.push({ user_id: USER_ID, species_id: row.species_id, source: row.source, created_at: new Date().toISOString() });
+      observations.push({ user_id: subOf(req.headers.authorization) ?? USER_ID, species_id: row.species_id, source: row.source, created_at: new Date().toISOString() });
       send(201, []);
       return;
     }
@@ -238,7 +350,7 @@ export const startMockBackend = (port: number): Promise<MockBackend> => {
 
   return new Promise((resolve) => {
     server.listen(port, '127.0.0.1', () =>
-      resolve({ server, setMode: (m) => (mode = m), log, anthropicRequests, feedback }),
+      resolve({ server, setMode: (m) => (mode = m), log, anthropicRequests, feedback, uploads: observations, accountId: ACCOUNT_ID }),
     );
   });
 };

@@ -62,6 +62,8 @@ export interface Stats {
   misidRate: number | null;
   avgRating: number | null;
   ratingCount: number;
+  /** 의견에 적은 연령대별 응답 수와 평균 별점(연령대를 고른 의견만) */
+  ageGroups: { ageGroup: string; count: number; avgRating: number | null }[];
   daily: DailyRow[];
   topSpecies: { id: string; nameKo: string; kind: string; count: number }[];
   recentFeedback: {
@@ -197,6 +199,7 @@ export const computeStats = (
     misidRate: aiObservations > 0 ? misidReports / aiObservations : null,
     avgRating: rated.length > 0 ? rated.reduce((s, f) => s + (f.rating as number), 0) / rated.length : null,
     ratingCount: rated.length,
+    ageGroups: summarizeAges(feedback),
     daily,
     topSpecies,
     recentFeedback: [...feedback]
@@ -212,6 +215,25 @@ export const computeStats = (
         createdAt: f.created_at,
       })),
   };
+};
+
+const summarizeAges = (feedback: FeedbackRow[]): Stats['ageGroups'] => {
+  const byAge = new Map<string, { count: number; ratings: number[] }>();
+  for (const f of feedback) {
+    const age = typeof f.context?.ageGroup === 'string' ? (f.context.ageGroup as string) : null;
+    if (f.kind !== 'general' || !age) continue;
+    const cur = byAge.get(age) ?? { count: 0, ratings: [] };
+    cur.count += 1;
+    if (typeof f.rating === 'number') cur.ratings.push(f.rating);
+    byAge.set(age, cur);
+  }
+  return [...byAge.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0], 'ko'))
+    .map(([ageGroup, v]) => ({
+      ageGroup,
+      count: v.count,
+      avgRating: v.ratings.length > 0 ? v.ratings.reduce((s, n) => s + n, 0) / v.ratings.length : null,
+    }));
 };
 
 /** 토큰 비교(길이와 무관하게 같은 시간). */

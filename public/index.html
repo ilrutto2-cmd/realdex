@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover: 아이폰 노치 영역까지 쓰고 안전 영역은 앱이 처리한다 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>REALDEX 리얼덱스</title>
+    <meta name="description" content="주변의 곤충과 새를 찍으면 AI가 알려 주고, 나만의 생물 도감에 모입니다." />
+    <meta name="theme-color" content="#1E4D3B" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="icon" href="/favicon.ico" />
+    <!-- 아이폰 홈 화면에 추가했을 때 -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="REALDEX" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- 링크 미리보기 -->
+    <meta property="og:title" content="REALDEX 리얼덱스 - 우리 동네 생물 도감" />
+    <meta property="og:description" content="곤충과 새를 찍으면 AI가 알려 주고, 나만의 도감에 모여요." />
+    <meta property="og:image" content="/logo512.png" />
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+        background: #f5f0e1;
+      }
+      body {
+        overflow: hidden;
+        margin: 0;
+        /* 휴대폰에서 두 번 탭 확대, 길게 눌러 텍스트 선택 방지 */
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior: none;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>REALDEX를 쓰려면 브라우저에서 자바스크립트를 켜 주세요.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
