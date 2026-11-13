@@ -34,7 +34,24 @@ jobs:
           echo "TOKEN=$TOKEN" >> "$GITHUB_ENV"
           echo "익명 로그인 성공"
 
+      - name: Setup status (AI 비용 없음)
+        run: |
+          H=(-H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $TOKEN")
+          FB=$(curl -s -o /dev/null -w '%{http_code}' "${H[@]}" "$SUPABASE_URL/rest/v1/feedback?select=id&limit=1")
+          EXT=$(curl -s -o fb.json -w '%{http_code}' "${H[@]}" "$SUPABASE_URL/rest/v1/species?select=id&kind=eq.ext&limit=5"); EXTN=$(jq 'length' fb.json 2>/dev/null)
+          ST=$(curl -s -o st.json -w '%{http_code}' -X POST -H "apikey: $SUPABASE_KEY" -H "authorization: Bearer $SUPABASE_KEY" -H 'x-stats-token: wrong-token-for-check' "$SUPABASE_URL/functions/v1/stats")
+          echo "feedback 테이블: HTTP $FB (200이면 있음)"
+          echo "species.kind 열(확장 도감): HTTP $EXT, 확장 종 ${EXTN}개"
+          echo "stats 함수: HTTP $ST $(cat st.json) (401=배포+토큰 설정됨, 503=토큰 미설정, 404=미배포)"
+          {
+            echo "## 설정 상태"
+            echo "- feedback 테이블: HTTP $FB"
+            echo "- 확장 도감 열: HTTP $EXT (확장 종 ${EXTN}개)"
+            echo "- stats 함수: HTTP $ST"
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Identify test photos
+        if: ${{ inputs.pages != 'none' }}
         run: |
           UA="realdex-server-check/1.0 (github.com/ilrutto2-cmd/realdex)"
           FAIL=0
