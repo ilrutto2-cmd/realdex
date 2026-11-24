@@ -1,0 +1,51 @@
+name: Web demo (GitHub Pages)
+
+# 웹/PWA 데모를 GitHub Pages(https://<계정>.github.io/realdex/)에 올린다.
+# 데모 모드로 빌드한다: Supabase 값을 비워 AI 판별을 연결하지 않으므로
+# 누가 열어도 Anthropic 사용료가 들지 않는다(촬영 후 생물을 직접 고르는 방식).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Set web base path
+        run: |
+          jq --arg b "/${{ github.event.repository.name }}" '.expo.experiments.baseUrl = $b' app.json > app.tmp && mv app.tmp app.json
+      - name: Export web (demo mode)
+        run: npx expo export --platform web --output-dir dist/web
+        env:
+          EXPO_PUBLIC_SUPABASE_URL: ''
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ''
+      - run: cp dist/web/index.html dist/web/404.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
